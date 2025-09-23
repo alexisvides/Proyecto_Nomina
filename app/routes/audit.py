@@ -1,1 +1,0 @@
-# Rutas de auditoría

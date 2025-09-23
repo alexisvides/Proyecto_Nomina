@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}Deducciones y Prestaciones{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+      <h2 class="card-title" style="margin:0;">Deducciones y Prestaciones</h2>
+      <a class="btn btn-primary" href="{{ url_for('beneficios_nuevo') }}">Nuevo</a>
+    </div>
+
+    <div style="overflow:auto;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid #1f2a44; color:var(--muted);">
+            <th style="padding:10px 8px;">ID</th>
+            <th style="padding:10px 8px;">Nombre</th>
+            <th style="padding:10px 8px;">Tipo</th>
+            <th style="padding:10px 8px;">Cálculo</th>
+            <th style="padding:10px 8px;">Valor</th>
+            <th style="padding:10px 8px;">Activo</th>
+            <th style="padding:10px 8px;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if items %}
+            {% for it in items %}
+              <tr style="border-bottom:1px solid #1f2a44;">
+                <td style="padding:10px 8px;">{{ it[0] }}</td>
+                <td style="padding:10px 8px;">{{ it[1] }}</td>
+                <td style="padding:10px 8px; text-transform:capitalize;">{{ it[2] }}</td>
+                <td style="padding:10px 8px; text-transform:capitalize;">{{ it[3] }}</td>
+                <td style="padding:10px 8px;">{{ it[4] }}</td>
+                <td style="padding:10px 8px;">{{ 'Sí' if it[5] else 'No' }}</td>
+                <td style="padding:10px 8px;">
+                  <form method="post" action="{{ url_for('beneficios_toggle', bid=it[0]) }}" style="display:inline;">
+                    <button class="btn btn-outline" type="submit">{{ 'Desactivar' if it[5] else 'Activar' }}</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="7" style="padding:12px; color:var(--muted);">No hay registros.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

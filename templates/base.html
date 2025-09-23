@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}App Nómina{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  <div class="app-bg"></div>
+  <header class="app-header">
+    <div class="brand">Nómina</div>
+    <nav>
+      {% if session.get('user_id') %}
+        <a class="btn btn-link" href="{{ url_for('dashboard') }}">Inicio</a>
+        <a class="btn btn-outline" href="{{ url_for('logout') }}">Salir</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title">General</div>
+        <a class="nav-link{% if request.endpoint == 'dashboard' %} active{% endif %}" href="{{ url_for('dashboard') }}" aria-current="{% if request.endpoint == 'dashboard' %}page{% endif %}">Dashboard</a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">Nómina</div>
+        <a class="nav-link{% if request.endpoint in ['periodos_listado','periodos_nuevo'] %} active{% endif %}" href="{{ url_for('periodos_listado') }}" aria-current="{% if request.endpoint in ['periodos_listado','periodos_nuevo'] %}page{% endif %}">Periodos de nómina</a>
+        <!-- Se pueden agregar enlaces a registros, items, resumen cuando existan rutas -->
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">Catálogos</div>
+        <a class="nav-link" href="#">Empleados</a>
+        <a class="nav-link" href="#">Departamentos y Puestos</a>
+        <a class="nav-link{% if request.endpoint in ['beneficios_listado','beneficios_nuevo'] %} active{% endif %}" href="{{ url_for('beneficios_listado') }}" aria-current="{% if request.endpoint in ['beneficios_listado','beneficios_nuevo'] %}page{% endif %}">Deducciones y Prestaciones</a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">Operación</div>
+        <a class="nav-link{% if request.endpoint in ['asistencia_listado','asistencia_nuevo'] %} active{% endif %}" href="{{ url_for('asistencia_listado') }}" aria-current="{% if request.endpoint in ['asistencia_listado','asistencia_nuevo'] %}page{% endif %}">Asistencia</a>
+        <a class="nav-link" href="#">Reportes</a>
+        <a class="nav-link" href="#">Comprobantes</a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">Seguridad</div>
+        <a class="nav-link" href="#">Usuarios y Roles</a>
+        <a class="nav-link" href="#">Auditoría</a>
+      </div>
+    </aside>
+
+    <main class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-wrapper">
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <footer class="app-footer">© {{ 2025 }} Nómina Demo</footer>
+</body>
+</html>
+

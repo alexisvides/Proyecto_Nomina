@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}Periodos de Nómina{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+      <h2 class="card-title" style="margin:0;">Periodos de Nómina</h2>
+      <a class="btn btn-primary" href="{{ url_for('periodos_nuevo') }}">Nuevo periodo</a>
+    </div>
+
+    <div style="overflow:auto;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid #1f2a44; color:var(--muted);">
+            <th style="padding:10px 8px;">ID</th>
+            <th style="padding:10px 8px;">Inicio</th>
+            <th style="padding:10px 8px;">Fin</th>
+            <th style="padding:10px 8px;">Tipo</th>
+            <th style="padding:10px 8px;">Creado</th>
+            <th style="padding:10px 8px;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if periodos %}
+            {% for p in periodos %}
+              <tr style="border-bottom:1px solid #1f2a44;">
+                <td style="padding:10px 8px;">{{ p[0] }}</td>
+                <td style="padding:10px 8px;">{{ p[1] }}</td>
+                <td style="padding:10px 8px;">{{ p[2] }}</td>
+                <td style="padding:10px 8px; text-transform:capitalize;">{{ p[3] }}</td>
+                <td style="padding:10px 8px;">{{ p[4] }}</td>
+                <td style="padding:10px 8px;">
+                  <form method="post" action="{{ url_for('generar_nomina', id_periodo=p[0]) }}" style="display:inline;">
+                    <button class="btn btn-outline" type="submit">Generar nómina</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" style="padding:12px; color:var(--muted);">No hay periodos creados.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

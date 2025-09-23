@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Asistencia{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+      <h2 class="card-title" style="margin:0;">Asistencia</h2>
+      <a class="btn btn-primary" href="{{ url_for('asistencia_nuevo') }}">Registrar</a>
+    </div>
+
+    {% if not tabla_ok %}
+      <div class="flash warning">La tabla de asistencias no existe. Crea la tabla desde el script de migración para continuar.</div>
+    {% endif %}
+
+    <div style="overflow:auto;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid #1f2a44; color:var(--muted);">
+            <th style="padding:10px 8px;">ID</th>
+            <th style="padding:10px 8px;">Fecha/Hora</th>
+            <th style="padding:10px 8px;">Tipo</th>
+            <th style="padding:10px 8px;">Empleado</th>
+            <th style="padding:10px 8px;">Observación</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if items %}
+            {% for a in items %}
+              <tr style="border-bottom:1px solid #1f2a44;">
+                <td style="padding:10px 8px;">{{ a[0] }}</td>
+                <td style="padding:10px 8px;">{{ a[1] }}</td>
+                <td style="padding:10px 8px; text-transform:capitalize;">{{ a[2] }}</td>
+                <td style="padding:10px 8px;">{{ a[5] }} {{ a[6] }} ({{ a[4] }})</td>
+                <td style="padding:10px 8px;">{{ a[3] }}</td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5" style="padding:12px; color:var(--muted);">No hay registros o tabla inexistente.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

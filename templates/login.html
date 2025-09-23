@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Iniciar Sesión - App Nómina{% endblock %}
+
+{% block content %}
+<section class="auth-section">
+  <div class="card auth-card">
+    <h1 class="card-title">Bienvenido</h1>
+    <p class="card-subtitle">Inicia sesión para continuar</p>
+
+    <form method="post" class="form">
+      <div class="form-group">
+        <label for="usuario">Usuario o Correo</label>
+        <input type="text" id="usuario" name="usuario" placeholder="tu.usuario o email@dominio.com" required>
+      </div>
+      <div class="form-group">
+        <label for="clave">Contraseña</label>
+        <input type="password" id="clave" name="clave" placeholder="••••••••" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+    </form>
+  </div>
+</section>
+{% endblock %}
