@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block title %}Empleados{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+      <h2 class="card-title" style="margin:0;">Empleados</h2>
+      <a class="btn btn-primary" href="{{ url_for('empleados_nuevo') }}">Nuevo empleado</a>
+    </div>
+
+    <div style="overflow:auto;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid #1f2a44; color:var(--muted);">
+            <th style="padding:10px 8px;">ID</th>
+            <th style="padding:10px 8px;">Código</th>
+            <th style="padding:10px 8px;">Nombres</th>
+            <th style="padding:10px 8px;">Apellidos</th>
+            <th style="padding:10px 8px;">Inicio</th>
+            <th style="padding:10px 8px;">Fin</th>
+            <th style="padding:10px 8px;">Salario</th>
+            <th style="padding:10px 8px;">DPI</th>
+            <th style="padding:10px 8px;">IGSS</th>
+            <th style="padding:10px 8px;">Nacimiento</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if empleados %}
+            {% for e in empleados %}
+              <tr style="border-bottom:1px solid #1f2a44;">
+                <td style="padding:10px 8px;">{{ e[0] }}</td>
+                <td style="padding:10px 8px;">{{ e[1] }}</td>
+                <td style="padding:10px 8px;">{{ e[2] }}</td>
+                <td style="padding:10px 8px;">{{ e[3] }}</td>
+                <td style="padding:10px 8px;">{{ e[4] }}</td>
+                <td style="padding:10px 8px;">{{ e[5] }}</td>
+                <td style="padding:10px 8px;">{{ '%.2f'|format(e[6]) }}</td>
+                <td style="padding:10px 8px;">{{ e[7] }}</td>
+                <td style="padding:10px 8px;">{{ e[8] }}</td>
+                <td style="padding:10px 8px;">{{ e[9] }}</td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="10" style="padding:12px; color:var(--muted);">No hay empleados registrados.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

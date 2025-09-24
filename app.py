@@ -3,6 +3,8 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from dotenv import load_dotenv
 from db import get_connection
 from datetime import datetime
+import io
+import csv
 
 # Cargar variables de entorno
 load_dotenv()
@@ -162,9 +164,7 @@ def generar_nomina(id_periodo: int):
                 if not exists:
                     flash("El periodo no existe.", "warning")
                     return redirect(url_for("periodos_listado"))
-
                 # Insertar RegistrosNomina para empleados que aún no lo tengan
-                # Usa SalarioBase desde Empleados, y 0 en totales; trigger se encargará de neto al agregar items
                 cur.execute(
                     """
                     INSERT INTO RegistrosNomina (IdEmpleado, IdPeriodo, SalarioBase, TotalPrestaciones, TotalDeducciones, SalarioNeto)
@@ -177,11 +177,165 @@ def generar_nomina(id_periodo: int):
                     """,
                     (id_periodo, id_periodo),
                 )
+                # Porcentaje IGSS desde .env (default 4.83)
+                try:
+                    igss_pct = float(os.getenv("IGSS_PCT", "4.83"))
+                except Exception:
+                    igss_pct = 4.83
+
+                # Asegurar beneficio IGSS (4.83%) existe
+                cur.execute(
+                    """
+                    IF NOT EXISTS (SELECT 1 FROM BeneficiosDeducciones WHERE Nombre = 'IGSS')
+                    BEGIN
+                        INSERT INTO BeneficiosDeducciones (Nombre, Tipo, TipoCalculo, Valor, Activo, Descripcion)
+                        VALUES ('IGSS','deduccion','porcentaje',?,1,'Deducción IGSS porcentaje variable')
+                    END
+                    """,
+                    (igss_pct,)
+                )
+                # Obtener Id del beneficio IGSS
+                cur.execute("SELECT IdBeneficioDeduccion FROM BeneficiosDeducciones WHERE Nombre = 'IGSS'")
+                row = cur.fetchone()
+                igss_id = row[0] if row else None
+                if igss_id is not None:
+                    # Insertar ItemsNomina IGSS por cada registro del periodo que no lo tenga aún
+                    cur.execute(
+                        f"""
+                        INSERT INTO ItemsNomina (IdNomina, IdBeneficioDeduccion, TipoItem, Monto)
+                        SELECT rn.IdNomina, ?, 'deduccion', ROUND(rn.SalarioBase * {igss_pct/100:.6f}, 2)
+                        FROM RegistrosNomina rn
+                        WHERE rn.IdPeriodo = ?
+                          AND NOT EXISTS (
+                              SELECT 1 FROM ItemsNomina i
+                              WHERE i.IdNomina = rn.IdNomina AND i.IdBeneficioDeduccion = ?
+                          )
+                        """,
+                        (igss_id, id_periodo, igss_id),
+                    )
                 conn.commit()
         flash("Registros de nómina generados para el periodo.", "success")
     except Exception as e:
         flash(f"Error generando registros de nómina: {e}", "danger")
     return redirect(url_for("periodos_listado"))
+
+def _consultar_detalle_periodo(id_periodo: int):
+    """Obtiene el detalle de nómina del periodo con agregados por empleado."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 
+                    e.IdEmpleado,
+                    e.Apellidos,
+                    e.Nombres,
+                    e.SalarioBase,
+                    -- Días laborados (conteo de días con 'entrada' en asistencia dentro del periodo)
+                    ISNULL((
+                        SELECT COUNT(DISTINCT CAST(a.FechaHora AS date))
+                        FROM Asistencias a
+                        JOIN PeriodosNomina p2 ON p2.IdPeriodo = p.IdPeriodo
+                        WHERE a.IdEmpleado = e.IdEmpleado
+                          AND a.Tipo = 'entrada'
+                          AND CAST(a.FechaHora AS date) BETWEEN p2.FechaInicio AND p2.FechaFin
+                    ), 0) AS DiasLaborados,
+                    -- Número IGSS (columna dedicada)
+                    e.NumeroIGSS AS NumeroIGSS,
+                    -- Total deducciones
+                    ISNULL((
+                        SELECT SUM(i.Monto)
+                        FROM RegistrosNomina rn
+                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        WHERE rn.IdPeriodo = p.IdPeriodo
+                          AND rn.IdEmpleado = e.IdEmpleado
+                          AND i.TipoItem = 'deduccion'
+                    ), 0) AS TotalDeducciones,
+                    -- Total bonificaciones (prestaciones)
+                    ISNULL((
+                        SELECT SUM(i.Monto)
+                        FROM RegistrosNomina rn
+                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        WHERE rn.IdPeriodo = p.IdPeriodo
+                          AND rn.IdEmpleado = e.IdEmpleado
+                          AND i.TipoItem = 'prestacion'
+                    ), 0) AS TotalBonificaciones,
+                    -- IGSS calculado por ItemsNomina con Beneficio 'IGSS'
+                    ISNULL((
+                        SELECT SUM(i.Monto)
+                        FROM RegistrosNomina rn
+                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
+                        WHERE rn.IdPeriodo = p.IdPeriodo
+                          AND rn.IdEmpleado = e.IdEmpleado
+                          AND i.TipoItem = 'deduccion'
+                          AND b.Nombre = 'IGSS'
+                    ), 0) AS IGSSMonto,
+                    -- Descuento ISR (si existe un concepto llamado 'ISR')
+                    ISNULL((
+                        SELECT SUM(i.Monto)
+                        FROM RegistrosNomina rn
+                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
+                        WHERE rn.IdPeriodo = p.IdPeriodo
+                          AND rn.IdEmpleado = e.IdEmpleado
+                          AND i.TipoItem = 'deduccion'
+                          AND b.Nombre = 'ISR'
+                    ), 0) AS DescuentoISR
+                FROM Empleados e
+                CROSS JOIN PeriodosNomina p
+                WHERE p.IdPeriodo = ?
+                ORDER BY e.Apellidos, e.Nombres
+                """,
+                (id_periodo,),
+            )
+            rows = cur.fetchall()
+    return rows
+
+
+@app.route("/nomina/periodos/<int:id_periodo>/detalle")
+def periodo_detalle(id_periodo: int):
+    try:
+        datos = _consultar_detalle_periodo(id_periodo)
+        return render_template("nomina/periodo_detalle.html", filas=datos, id_periodo=id_periodo)
+    except Exception as e:
+        flash(f"Error consultando detalle del periodo: {e}", "danger")
+        return render_template("nomina/periodo_detalle.html", filas=[], id_periodo=id_periodo)
+
+
+@app.route("/nomina/periodos/<int:id_periodo>/csv")
+def periodo_csv(id_periodo: int):
+    try:
+        datos = _consultar_detalle_periodo(id_periodo)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "IdEmpleado",
+            "Apellidos",
+            "Nombres",
+            "SalarioBase",
+            "DiasLaborados",
+            "NumeroIGSS",
+            "TotalDeducciones",
+            "TotalBonificaciones",
+            "IGSSMonto",
+            "DescuentoISR",
+        ])
+        for r in datos:
+            writer.writerow(list(r))
+        csv_data = output.getvalue()
+        output.close()
+
+        from flask import Response
+        return Response(
+            csv_data,
+            mimetype="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=periodo_{id_periodo}.csv"
+            },
+        )
+    except Exception as e:
+        flash(f"No se pudo generar CSV: {e}", "danger")
+        return redirect(url_for("periodos_listado"))
 
 
 # =============================
@@ -345,6 +499,90 @@ def asistencia_nuevo():
         # si no existe la tabla empleados aún, dejamos la lista vacía
         pass
     return render_template("asistencia/new.html", empleados=empleados)
+
+
+# =============================
+# Empleados (listar y crear)
+# =============================
+@app.route("/empleados")
+def empleados_listado():
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT IdEmpleado, CodigoEmpleado, Nombres, Apellidos, 
+                           CONVERT(varchar(10), FechaContratacion, 23) as FechaInicio,
+                           CONVERT(varchar(10), FechaFin, 23) as FechaFin,
+                           SalarioBase, DocumentoIdentidad, NumeroIGSS,
+                           CONVERT(varchar(10), FechaNacimiento, 23) as FechaNacimiento
+                    FROM Empleados
+                    ORDER BY Apellidos, Nombres
+                    """
+                )
+                empleados = cur.fetchall()
+        return render_template("empleados/list.html", empleados=empleados)
+    except Exception as e:
+        flash(f"Error cargando empleados: {e}", "danger")
+        return render_template("empleados/list.html", empleados=[])
+
+
+@app.route("/empleados/nuevo", methods=["GET", "POST"])
+def empleados_nuevo():
+    if request.method == "POST":
+        codigo = request.form.get("codigo")
+        nombres = request.form.get("nombres")
+        apellidos = request.form.get("apellidos")
+        fecha_inicio = request.form.get("fecha_inicio")
+        fecha_fin = request.form.get("fecha_fin") or None
+        salario = request.form.get("salario")
+        dpi = request.form.get("dpi")
+        igss = request.form.get("igss")
+        fecha_nac = request.form.get("fecha_nacimiento") or None
+
+        if not (codigo and nombres and apellidos and fecha_inicio and salario and dpi):
+            flash("Código, Nombres, Apellidos, Fecha de inicio, Salario y DPI son obligatorios.", "warning")
+            return render_template("empleados/new.html")
+
+        try:
+            salario_num = float(salario)
+            if salario_num < 0:
+                raise ValueError
+        except Exception:
+            flash("Salario inválido.", "warning")
+            return render_template("empleados/new.html")
+
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO Empleados (
+                            CodigoEmpleado, Nombres, Apellidos, DocumentoIdentidad, 
+                            FechaContratacion, FechaFin, SalarioBase, NumeroIGSS, FechaNacimiento
+                        ) VALUES (?,?,?,?,?,?,?,?,?)
+                        """,
+                        (
+                            codigo,
+                            nombres,
+                            apellidos,
+                            dpi,
+                            fecha_inicio,
+                            fecha_fin,
+                            salario_num,
+                            igss,
+                            fecha_nac,
+                        ),
+                    )
+                    conn.commit()
+            flash("Empleado creado.", "success")
+            return redirect(url_for("empleados_listado"))
+        except Exception as e:
+            flash(f"No se pudo crear el empleado: {e}", "danger")
+            return render_template("empleados/new.html")
+
+    return render_template("empleados/new.html")
+
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.getenv("PORT", 5000)), debug=True)

@@ -30,7 +30,9 @@
                 <td style="padding:10px 8px;">{{ p[2] }}</td>
                 <td style="padding:10px 8px; text-transform:capitalize;">{{ p[3] }}</td>
                 <td style="padding:10px 8px;">{{ p[4] }}</td>
-                <td style="padding:10px 8px;">
+                <td style="padding:10px 8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                  <a class="btn btn-link" href="{{ url_for('periodo_detalle', id_periodo=p[0]) }}">Ver detalle</a>
+                  <a class="btn btn-outline" href="{{ url_for('periodo_csv', id_periodo=p[0]) }}">CSV</a>
                   <form method="post" action="{{ url_for('generar_nomina', id_periodo=p[0]) }}" style="display:inline;">
                     <button class="btn btn-outline" type="submit">Generar nómina</button>
                   </form>

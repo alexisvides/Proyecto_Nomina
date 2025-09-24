@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Detalle Periodo {{ id_periodo }}{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+      <h2 class="card-title" style="margin:0;">Detalle del Periodo #{{ id_periodo }}</h2>
+      <div style="display:flex; gap:8px;">
+        <a class="btn btn-outline" href="{{ url_for('periodos_listado') }}">Volver</a>
+        <a class="btn btn-primary" href="{{ url_for('periodo_csv', id_periodo=id_periodo) }}">Descargar CSV</a>
+      </div>
+    </div>
+
+    <div style="overflow:auto;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid #1f2a44; color:var(--muted);">
+            <th style="padding:10px 8px;">IdEmpleado</th>
+            <th style="padding:10px 8px;">Apellidos</th>
+            <th style="padding:10px 8px;">Nombres</th>
+            <th style="padding:10px 8px;">Salario Base</th>
+            <th style="padding:10px 8px;">Días Laborados</th>
+            <th style="padding:10px 8px;">No. IGSS</th>
+            <th style="padding:10px 8px;">Total Deducciones</th>
+            <th style="padding:10px 8px;">Total Bonificaciones</th>
+            <th style="padding:10px 8px;">IGSS (4.83%)</th>
+            <th style="padding:10px 8px;">Descuento ISR</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if filas %}
+            {% for r in filas %}
+              <tr style="border-bottom:1px solid #1f2a44;">
+                <td style="padding:10px 8px;">{{ r[0] }}</td>
+                <td style="padding:10px 8px;">{{ r[1] }}</td>
+                <td style="padding:10px 8px;">{{ r[2] }}</td>
+                <td style="padding:10px 8px;">{{ '%.2f'|format(r[3]) }}</td>
+                <td style="padding:10px 8px;">{{ r[4] }}</td>
+                <td style="padding:10px 8px;">{{ r[5] }}</td>
+                <td style="padding:10px 8px;">{{ '%.2f'|format(r[6]) }}</td>
+                <td style="padding:10px 8px;">{{ '%.2f'|format(r[7]) }}</td>
+                <td style="padding:10px 8px;">{{ '%.2f'|format(r[8]) }}</td>
+                <td style="padding:10px 8px;">{{ '%.2f'|format(r[9]) }}</td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="10" style="padding:12px; color:var(--muted);">No hay datos para este periodo.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
