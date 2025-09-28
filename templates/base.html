@@ -9,10 +9,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
-<body>
+<body{% if hide_sidebar %} data-hide-sidebar="1"{% endif %}>
   <div class="app-bg"></div>
   <header class="app-header">
-    <div class="brand">Nómina</div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      {% if not hide_sidebar %}
+        <button class="btn btn-outline sidebar-toggle" id="sidebarToggle" aria-label="Alternar menú" aria-expanded="false">☰</button>
+      {% endif %}
+      <div class="brand">Nómina</div>
+    </div>
     <nav>
       {% if session.get('user_id') %}
         <a class="btn btn-link" href="{{ url_for('dashboard') }}">Inicio</a>
@@ -21,7 +26,11 @@
     </nav>
   </header>
 
+  {% if not hide_sidebar %}
+  <div id="sidebarOverlay" class="sidebar-overlay"></div>
+  {% endif %}
   <div class="layout">
+    {% if not hide_sidebar %}
     <aside class="sidebar">
       <div class="sidebar-section">
         <div class="sidebar-title">General</div>
@@ -50,6 +59,7 @@
         <a class="nav-link" href="#">Auditoría</a>
       </div>
     </aside>
+    {% endif %}
 
     <main class="content">
       {% with messages = get_flashed_messages(with_categories=true) %}
@@ -66,7 +76,40 @@
     </main>
   </div>
 
-  <footer class="app-footer">© {{ 2025 }} Nómina Demo</footer>
+  <script>
+    (function(){
+      const HIDE_SIDEBAR = document.body.hasAttribute('data-hide-sidebar');
+      const btn = document.getElementById('sidebarToggle');
+      const overlay = document.getElementById('sidebarOverlay');
+      const STORAGE_KEY = 'sidebar_open_v1';
+      // Restaurar estado
+      try{
+        if(!HIDE_SIDEBAR){
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if(saved === '1'){
+            document.body.classList.add('sidebar-open');
+            if(btn){ btn.setAttribute('aria-expanded','true'); }
+          }
+        } else {
+          // En login u otras vistas sin sidebar, asegurar estado limpio
+          document.body.classList.remove('sidebar-open');
+          if(btn){ btn.setAttribute('aria-expanded','false'); }
+          try{ localStorage.setItem(STORAGE_KEY, '0'); }catch(e){}
+        }
+      }catch(e){}
+      function toggle(){
+        const isOpen = document.body.classList.toggle('sidebar-open');
+        if(btn){ btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false'); }
+        try{ localStorage.setItem(STORAGE_KEY, isOpen ? '1' : '0'); }catch(e){}
+      }
+      if(!HIDE_SIDEBAR && btn){ btn.addEventListener('click', toggle); }
+      if(!HIDE_SIDEBAR && overlay){ overlay.addEventListener('click', ()=>{
+        document.body.classList.remove('sidebar-open');
+        if(btn){ btn.setAttribute('aria-expanded','false'); }
+        try{ localStorage.setItem(STORAGE_KEY, '0'); }catch(e){}
+      }); }
+    })();
+  </script>
 </body>
 </html>
 

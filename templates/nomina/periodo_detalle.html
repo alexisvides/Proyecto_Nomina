@@ -7,8 +7,18 @@
     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
       <h2 class="card-title" style="margin:0;">Detalle del Periodo #{{ id_periodo }}</h2>
       <div style="display:flex; gap:8px;">
-        <a class="btn btn-outline" href="{{ url_for('periodos_listado') }}">Volver</a>
-        <a class="btn btn-primary" href="{{ url_for('periodo_csv', id_periodo=id_periodo) }}">Descargar CSV</a>
+        <a class="btn btn-outline" href="{{ url_for('periodos_listado') }}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <polyline points="15 18 9 12 15 6"/><line x1="19" y1="12" x2="9" y2="12"/>
+          </svg>
+          Volver
+        </a>
+        <a class="btn btn-primary" href="{{ url_for('periodo_csv', id_periodo=id_periodo) }}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M16 3v4a1 1 0 0 0 1 1h4"/>
+          </svg>
+          Descargar CSV
+        </a>
       </div>
     </div>
 
@@ -26,6 +36,9 @@
             <th style="padding:10px 8px;">Total Bonificaciones</th>
             <th style="padding:10px 8px;">IGSS (4.83%)</th>
             <th style="padding:10px 8px;">Descuento ISR</th>
+            <th style="padding:10px 8px;">Salario Bruto</th>
+            <th style="padding:10px 8px;">Salario Neto</th>
+            <th style="padding:10px 8px;">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -42,11 +55,28 @@
                 <td style="padding:10px 8px;">{{ '%.2f'|format(r[7]) }}</td>
                 <td style="padding:10px 8px;">{{ '%.2f'|format(r[8]) }}</td>
                 <td style="padding:10px 8px;">{{ '%.2f'|format(r[9]) }}</td>
+                <td style="padding:10px 8px;">{{ '%.2f'|format(r[10]) }}</td>
+                <td style="padding:10px 8px;">{{ '%.2f'|format(r[11]) }}</td>
+                <td style="padding:10px 8px; white-space:nowrap;">
+                  {% set idNom = r[12] %}
+                  {% if idNom %}
+                  <form method="post" action="{{ url_for('registro_nomina_eliminar', id_nomina=idNom) }}" onsubmit="return confirm('¿Eliminar el registro de nómina {{ idNom }}? Esta acción no se puede deshacer.');" style="display:inline;">
+                    <button class="btn btn-outline" type="submit">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                      </svg>
+                      Eliminar
+                    </button>
+                  </form>
+                  {% else %}
+                  <span style="color:var(--muted);">—</span>
+                  {% endif %}
+                </td>
               </tr>
             {% endfor %}
           {% else %}
             <tr>
-              <td colspan="10" style="padding:12px; color:var(--muted);">No hay datos para este periodo.</td>
+              <td colspan="13" style="padding:12px; color:var(--muted);">No hay datos para este periodo.</td>
             </tr>
           {% endif %}
         </tbody>
