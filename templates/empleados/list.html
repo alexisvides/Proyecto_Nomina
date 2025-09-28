@@ -6,13 +6,35 @@
   <div class="card">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
       <h2 class="card-title" style="margin:0;">Empleados</h2>
-      <a class="btn btn-primary" href="{{ url_for('empleados_nuevo') }}">Nuevo empleado</a>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <div id="toolbarEmp" style="display:flex; gap:6px; align-items:center;">
+          <button id="btnEmpBenef" class="btn btn-outline" type="button" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+            Beneficios
+          </button>
+          <button id="btnEmpEliminar" class="btn btn-outline" type="button" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+            </svg>
+            Eliminar
+          </button>
+        </div>
+        <a class="btn btn-primary" href="{{ url_for('empleados_nuevo') }}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Nuevo empleado
+        </a>
+      </div>
     </div>
 
     <div style="overflow:auto;">
       <table style="width:100%; border-collapse:collapse;">
         <thead>
           <tr style="text-align:left; border-bottom:1px solid #1f2a44; color:var(--muted);">
+            <th style="padding:10px 8px; width:36px;"><input id="selEmpAll" type="checkbox" aria-label="Seleccionar todos"/></th>
             <th style="padding:10px 8px;">ID</th>
             <th style="padding:10px 8px;">Código</th>
             <th style="padding:10px 8px;">Nombres</th>
@@ -23,12 +45,14 @@
             <th style="padding:10px 8px;">DPI</th>
             <th style="padding:10px 8px;">IGSS</th>
             <th style="padding:10px 8px;">Nacimiento</th>
+            <th style="padding:10px 8px;">&nbsp;</th>
           </tr>
         </thead>
         <tbody>
           {% if empleados %}
             {% for e in empleados %}
               <tr style="border-bottom:1px solid #1f2a44;">
+                <td style="padding:10px 8px;"><input class="empRowSel" type="checkbox" value="{{ e[0] }}" aria-label="Seleccionar empleado {{ e[0] }}"/></td>
                 <td style="padding:10px 8px;">{{ e[0] }}</td>
                 <td style="padding:10px 8px;">{{ e[1] }}</td>
                 <td style="padding:10px 8px;">{{ e[2] }}</td>
@@ -39,6 +63,7 @@
                 <td style="padding:10px 8px;">{{ e[7] }}</td>
                 <td style="padding:10px 8px;">{{ e[8] }}</td>
                 <td style="padding:10px 8px;">{{ e[9] }}</td>
+                <td style="padding:10px 8px;">&nbsp;</td>
               </tr>
             {% endfor %}
           {% else %}
@@ -51,4 +76,49 @@
     </div>
   </div>
 </section>
+<script>
+  (function(){
+    const selAll = document.getElementById('selEmpAll');
+    const rows = Array.from(document.querySelectorAll('.empRowSel'));
+    const btnBenef = document.getElementById('btnEmpBenef');
+    const btnEliminar = document.getElementById('btnEmpEliminar');
+
+    function selectedIds(){ return rows.filter(r=>r.checked).map(r=>r.value); }
+    function updateToolbar(){
+      const ids = selectedIds();
+      const one = ids.length === 1;
+      const any = ids.length > 0;
+      if(btnBenef) btnBenef.disabled = !one;
+      if(btnEliminar) btnEliminar.disabled = !any;
+      if(selAll){ selAll.checked = ids.length === rows.length && rows.length>0; }
+    }
+    if(selAll){ selAll.addEventListener('change', ()=>{ rows.forEach(r=>r.checked = selAll.checked); updateToolbar(); }); }
+    rows.forEach(r=> r.addEventListener('change', updateToolbar));
+    updateToolbar();
+
+    if(btnBenef){
+      btnBenef.addEventListener('click', ()=>{
+        const ids = selectedIds(); if(ids.length!==1) return;
+        const url = "{{ url_for('empleados_beneficios', id_empleado=0) }}".replace('0', ids[0]);
+        window.location = url;
+      });
+    }
+
+    async function postEach(urlTpl, ids, confirmMsg){
+      if(confirmMsg && !confirm(confirmMsg)) return;
+      for(const id of ids){
+        const url = urlTpl.replace('0', id);
+        await fetch(url, {method:'POST'}).catch(()=>{});
+      }
+      window.location.reload();
+    }
+
+    if(btnEliminar){
+      btnEliminar.addEventListener('click', ()=>{
+        const ids = selectedIds(); if(!ids.length) return;
+        postEach("{{ url_for('empleados_eliminar', id_empleado=0) }}", ids, '¿Eliminar los empleados seleccionados? Esta acción no se puede deshacer.');
+      });
+    }
+  })();
+</script>
 {% endblock %}

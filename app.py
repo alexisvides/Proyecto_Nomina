@@ -28,7 +28,7 @@ def login():
 
         if not usuario_o_correo or not clave:
             flash("Por favor, completa todos los campos.", "warning")
-            return render_template("login.html")
+            return render_template("login.html", hide_sidebar=True)
 
         try:
             with get_connection() as conn:
@@ -46,18 +46,18 @@ def login():
 
             if not row:
                 flash("Usuario o contraseña incorrectos.", "danger")
-                return render_template("login.html")
+                return render_template("login.html", hide_sidebar=True)
 
             id_usuario, nombre_usuario, correo, clave_hash, activo = row
 
             if not activo:
                 flash("Tu usuario está inactivo. Contacta al administrador.", "danger")
-                return render_template("login.html")
+                return render_template("login.html", hide_sidebar=True)
 
             # Comparación en texto plano (temporal, no recomendado para producción)
             if str(clave_hash) != clave:
                 flash("Usuario o contraseña incorrectos.", "danger")
-                return render_template("login.html")
+                return render_template("login.html", hide_sidebar=True)
 
             # Autenticado
             session["user_id"] = int(id_usuario)
@@ -68,10 +68,10 @@ def login():
         except Exception as e:
             # En producción, registra e de forma segura
             flash(f"Error de conexión o consulta a la base de datos: {e}", "danger")
-            return render_template("login.html")
+            return render_template("login.html", hide_sidebar=True)
 
     # GET
-    return render_template("login.html")
+    return render_template("login.html", hide_sidebar=True)
 
 
 @app.route("/logout")
@@ -113,21 +113,44 @@ def periodos_listado():
 @app.route("/nomina/periodos/nuevo", methods=["GET", "POST"])
 def periodos_nuevo():
     if request.method == "POST":
-        fecha_inicio = request.form.get("fecha_inicio")
-        fecha_fin = request.form.get("fecha_fin")
-        tipo = request.form.get("tipo_periodo")
+        modalidad = (request.form.get("modalidad") or "").strip()
+        mes_txt = (request.form.get("mes") or "").strip()
+        anio_txt = (request.form.get("anio") or "").strip()
+        quincena_txt = (request.form.get("quincena") or "").strip()
 
-        if not fecha_inicio or not fecha_fin or not tipo:
-            flash("Completa todos los campos.", "warning")
+        if modalidad not in ("mensual", "quincenal") or not mes_txt or not anio_txt:
+            flash("Completa modalidad, mes y año.", "warning")
             return render_template("nomina/periodos_new.html")
 
         try:
-            # Validación simple de rango
-            fi = datetime.strptime(fecha_inicio, "%Y-%m-%d").date()
-            ff = datetime.strptime(fecha_fin, "%Y-%m-%d").date()
-            if ff < fi:
-                flash("La fecha fin no puede ser menor a la fecha inicio.", "warning")
-                return render_template("nomina/periodos_new.html")
+            mes = int(mes_txt)
+            anio = int(anio_txt)
+            if mes < 1 or mes > 12:
+                raise ValueError
+        except Exception:
+            flash("Mes/Año inválidos.", "warning")
+            return render_template("nomina/periodos_new.html")
+
+        try:
+            # Calcular fechas según modalidad
+            if modalidad == "mensual":
+                from calendar import monthrange
+                dia_fin = monthrange(anio, mes)[1]
+                fi = datetime(anio, mes, 1).date()
+                ff = datetime(anio, mes, dia_fin).date()
+                tipo = "mensual"
+            else:  # quincenal
+                from calendar import monthrange
+                q = int(quincena_txt or "1")
+                dia_fin_mes = monthrange(anio, mes)[1]
+                if q == 1:
+                    fi = datetime(anio, mes, 1).date()
+                    ff = datetime(anio, mes, 15).date()
+                    tipo = "quincena1"
+                else:
+                    fi = datetime(anio, mes, 16).date()
+                    ff = datetime(anio, mes, dia_fin_mes).date()
+                    tipo = "quincena2"
 
             with get_connection() as conn:
                 with conn.cursor() as cur:
@@ -144,18 +167,92 @@ def periodos_nuevo():
         except Exception as e:
             flash(f"Error creando periodo: {e}", "danger")
             return render_template("nomina/periodos_new.html")
-
     # GET
     return render_template("nomina/periodos_new.html")
+
+@app.route("/nomina/periodos/<int:id_periodo>/recalcular", methods=["POST"])
+def periodos_recalcular(id_periodo: int):
+    """Elimina ItemsNomina del periodo y los vuelve a calcular con catálogo y overrides por empleado.
+    No toca RegistrosNomina."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # 1) Borrar Items del periodo
+                cur.execute(
+                    """
+                    DELETE i
+                    FROM ItemsNomina i
+                    JOIN RegistrosNomina rn ON rn.IdNomina = i.IdNomina
+                    WHERE rn.IdPeriodo = ?
+                    """,
+                    (id_periodo,),
+                )
+
+                # 2) Asegurar IGSS en catálogo con IGSS_PCT
+                try:
+                    igss_pct = float(os.getenv("IGSS_PCT", "4.83"))
+                except Exception:
+                    igss_pct = 4.83
+                cur.execute(
+                    """
+                    IF NOT EXISTS (SELECT 1 FROM BeneficiosDeducciones WHERE Nombre = 'IGSS')
+                    BEGIN
+                        INSERT INTO BeneficiosDeducciones (Nombre, Tipo, TipoCalculo, Valor, Activo, Descripcion)
+                        VALUES ('IGSS','deduccion','porcentaje',?,1,'Deducción IGSS porcentaje variable')
+                    END
+                    ELSE
+                    BEGIN
+                        UPDATE BeneficiosDeducciones SET Valor = ? WHERE Nombre = 'IGSS' AND TipoCalculo='porcentaje'
+                    END
+                    """,
+                    (igss_pct, igss_pct),
+                )
+
+                # 3) Reinsertar Items desde Catálogo y Overrides (excluir ISR)
+                cur.execute(
+                    """
+                    WITH Cat AS (
+                        SELECT b.IdBeneficioDeduccion, b.Nombre, b.Tipo, b.TipoCalculo, b.Valor, b.Activo
+                        FROM BeneficiosDeducciones b
+                    ),
+                    Src AS (
+                        SELECT rn.IdNomina,
+                               c.IdBeneficioDeduccion,
+                               CASE WHEN COALESCE(eb.Activo, c.Activo) = 1 THEN 1 ELSE 0 END AS Usar,
+                               CASE 
+                                   WHEN COALESCE(eb.TipoCalculo, c.TipoCalculo) = 'porcentaje'
+                                       THEN ROUND(rn.SalarioBase * COALESCE(eb.Valor, c.Valor) / 100.0, 2)
+                                   ELSE COALESCE(eb.Valor, c.Valor)
+                               END AS Monto,
+                               CASE WHEN c.Tipo = 'prestacion' THEN 'prestacion' ELSE 'deduccion' END AS TipoItem
+                        FROM RegistrosNomina rn
+                        CROSS JOIN Cat c
+                        LEFT JOIN EmpleadoBeneficios eb 
+                               ON eb.IdBeneficioDeduccion = c.IdBeneficioDeduccion AND eb.IdEmpleado = rn.IdEmpleado
+                        WHERE rn.IdPeriodo = ?
+                          AND c.Nombre <> 'ISR'
+                    )
+                    INSERT INTO ItemsNomina (IdNomina, IdBeneficioDeduccion, TipoItem, Monto)
+                    SELECT s.IdNomina, s.IdBeneficioDeduccion, s.TipoItem, s.Monto
+                    FROM Src s
+                    WHERE s.Usar = 1
+                    """,
+                    (id_periodo,),
+                )
+                conn.commit()
+        flash("Ítems del periodo recalculados.", "success")
+    except Exception as e:
+        flash(f"No se pudo recalcular el periodo: {e}", "danger")
+    return redirect(url_for("periodos_listado"))
 
 
 @app.route("/nomina/periodos/<int:id_periodo>/generar", methods=["POST"])
 def generar_nomina(id_periodo: int):
-    # Genera registros de nómina para todos los empleados que no tengan registro en el periodo
+    # Genera registros de nómina para empleados activos en el periodo, prorrateando salario por días de asistencia
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Verificar que exista el periodo
+                # Verificar que exista el periodo y obtener rango
                 cur.execute(
                     "SELECT COUNT(1) FROM PeriodosNomina WHERE IdPeriodo = ?",
                     (id_periodo,),
@@ -164,18 +261,67 @@ def generar_nomina(id_periodo: int):
                 if not exists:
                     flash("El periodo no existe.", "warning")
                     return redirect(url_for("periodos_listado"))
-                # Insertar RegistrosNomina para empleados que aún no lo tengan
+                cur.execute("SELECT FechaInicio, FechaFin FROM PeriodosNomina WHERE IdPeriodo = ?", (id_periodo,))
+                fi, ff = cur.fetchone()
+
+                # Insertar RegistrosNomina para empleados activos que aún no lo tengan, prorrateado por asistencia
                 cur.execute(
                     """
+                    DECLARE @fi DATE = ?, @ff DATE = ?;
+                    DECLARE @diasPeriodo INT = DATEDIFF(DAY, @fi, @ff) + 1;
+
                     INSERT INTO RegistrosNomina (IdEmpleado, IdPeriodo, SalarioBase, TotalPrestaciones, TotalDeducciones, SalarioNeto)
-                    SELECT e.IdEmpleado, ?, e.SalarioBase, 0, 0, e.SalarioBase
+                    SELECT e.IdEmpleado,
+                           ?,
+                           -- Regla: si días asistencia > 26 => salario completo; si no, proporcional por días/periodo
+                           CASE 
+                             WHEN (
+                               SELECT COUNT(DISTINCT CAST(a.FechaHora AS DATE))
+                               FROM Asistencias a
+                               WHERE a.IdEmpleado = e.IdEmpleado
+                                 AND a.Tipo = 'entrada'
+                                 AND CAST(a.FechaHora AS DATE) BETWEEN @fi AND @ff
+                             ) > 26 THEN e.SalarioBase
+                             WHEN @diasPeriodo > 0 THEN ROUND(
+                               e.SalarioBase * ISNULL(CAST((
+                                 SELECT COUNT(DISTINCT CAST(a.FechaHora AS DATE))
+                                 FROM Asistencias a
+                                 WHERE a.IdEmpleado = e.IdEmpleado
+                                   AND a.Tipo = 'entrada'
+                                   AND CAST(a.FechaHora AS DATE) BETWEEN @fi AND @ff
+                               ) AS FLOAT) / @diasPeriodo, 0), 2)
+                             ELSE e.SalarioBase
+                           END AS SalarioCalculado,
+                           0,
+                           0,
+                           -- Neto inicial igual al salario calculado (antes de ítems)
+                           CASE 
+                             WHEN (
+                               SELECT COUNT(DISTINCT CAST(a.FechaHora AS DATE))
+                               FROM Asistencias a
+                               WHERE a.IdEmpleado = e.IdEmpleado
+                                 AND a.Tipo = 'entrada'
+                                 AND CAST(a.FechaHora AS DATE) BETWEEN @fi AND @ff
+                             ) > 26 THEN e.SalarioBase
+                             WHEN @diasPeriodo > 0 THEN ROUND(
+                               e.SalarioBase * ISNULL(CAST((
+                                 SELECT COUNT(DISTINCT CAST(a.FechaHora AS DATE))
+                                 FROM Asistencias a
+                                 WHERE a.IdEmpleado = e.IdEmpleado
+                                   AND a.Tipo = 'entrada'
+                                   AND CAST(a.FechaHora AS DATE) BETWEEN @fi AND @ff
+                               ) AS FLOAT) / @diasPeriodo, 0), 2)
+                             ELSE e.SalarioBase
+                           END
                     FROM Empleados e
-                    WHERE NOT EXISTS (
+                    WHERE e.FechaContratacion <= @ff
+                      AND (e.FechaFin IS NULL OR e.FechaFin >= @fi)
+                      AND NOT EXISTS (
                         SELECT 1 FROM RegistrosNomina rn
                         WHERE rn.IdEmpleado = e.IdEmpleado AND rn.IdPeriodo = ?
-                    )
+                      )
                     """,
-                    (id_periodo, id_periodo),
+                    (fi, ff, id_periodo, id_periodo),
                 )
                 # Porcentaje IGSS desde .env (default 4.83)
                 try:
@@ -183,7 +329,7 @@ def generar_nomina(id_periodo: int):
                 except Exception:
                     igss_pct = 4.83
 
-                # Asegurar beneficio IGSS (4.83%) existe
+                # Asegurar beneficio IGSS (porcentaje IGSS_PCT) existe
                 cur.execute(
                     """
                     IF NOT EXISTS (SELECT 1 FROM BeneficiosDeducciones WHERE Nombre = 'IGSS')
@@ -194,25 +340,42 @@ def generar_nomina(id_periodo: int):
                     """,
                     (igss_pct,)
                 )
-                # Obtener Id del beneficio IGSS
-                cur.execute("SELECT IdBeneficioDeduccion FROM BeneficiosDeducciones WHERE Nombre = 'IGSS'")
-                row = cur.fetchone()
-                igss_id = row[0] if row else None
-                if igss_id is not None:
-                    # Insertar ItemsNomina IGSS por cada registro del periodo que no lo tenga aún
-                    cur.execute(
-                        f"""
-                        INSERT INTO ItemsNomina (IdNomina, IdBeneficioDeduccion, TipoItem, Monto)
-                        SELECT rn.IdNomina, ?, 'deduccion', ROUND(rn.SalarioBase * {igss_pct/100:.6f}, 2)
+                # Aplicar automáticamente beneficios/deducciones activos usando overrides por empleado (EmpleadoBeneficios)
+                # Excluye ISR de auto-aplicación. IGSS se incluye aquí (con valor del catálogo o override).
+                cur.execute(
+                    f"""
+                    WITH Cat AS (
+                        SELECT b.IdBeneficioDeduccion, b.Nombre, b.Tipo, b.TipoCalculo, b.Valor, b.Activo
+                        FROM BeneficiosDeducciones b
+                    ),
+                    Src AS (
+                        SELECT rn.IdNomina,
+                               c.IdBeneficioDeduccion,
+                               CASE WHEN COALESCE(eb.Activo, c.Activo) = 1 THEN 1 ELSE 0 END AS Usar,
+                               CASE 
+                                   WHEN COALESCE(eb.TipoCalculo, c.TipoCalculo) = 'porcentaje'
+                                       THEN ROUND(rn.SalarioBase * COALESCE(eb.Valor, c.Valor) / 100.0, 2)
+                                   ELSE COALESCE(eb.Valor, c.Valor)
+                               END AS Monto,
+                               CASE WHEN c.Tipo = 'prestacion' THEN 'prestacion' ELSE 'deduccion' END AS TipoItem
                         FROM RegistrosNomina rn
+                        CROSS JOIN Cat c
+                        LEFT JOIN EmpleadoBeneficios eb 
+                               ON eb.IdBeneficioDeduccion = c.IdBeneficioDeduccion AND eb.IdEmpleado = rn.IdEmpleado
                         WHERE rn.IdPeriodo = ?
-                          AND NOT EXISTS (
-                              SELECT 1 FROM ItemsNomina i
-                              WHERE i.IdNomina = rn.IdNomina AND i.IdBeneficioDeduccion = ?
-                          )
-                        """,
-                        (igss_id, id_periodo, igss_id),
+                          AND c.Nombre <> 'ISR'
                     )
+                    INSERT INTO ItemsNomina (IdNomina, IdBeneficioDeduccion, TipoItem, Monto)
+                    SELECT s.IdNomina, s.IdBeneficioDeduccion, s.TipoItem, s.Monto
+                    FROM Src s
+                    WHERE s.Usar = 1
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ItemsNomina i
+                          WHERE i.IdNomina = s.IdNomina AND i.IdBeneficioDeduccion = s.IdBeneficioDeduccion
+                      )
+                    """,
+                    (id_periodo,)
+                )
                 conn.commit()
         flash("Registros de nómina generados para el periodo.", "success")
     except Exception as e:
@@ -230,34 +393,38 @@ def _consultar_detalle_periodo(id_periodo: int):
                     e.Apellidos,
                     e.Nombres,
                     e.SalarioBase,
-                    -- Días laborados (conteo de días con 'entrada' en asistencia dentro del periodo)
+                    -- Días laborados (conteo de días con 'entrada' dentro del rango del periodo)
                     ISNULL((
-                        SELECT COUNT(DISTINCT CAST(a.FechaHora AS date))
-                        FROM Asistencias a
-                        JOIN PeriodosNomina p2 ON p2.IdPeriodo = p.IdPeriodo
-                        WHERE a.IdEmpleado = e.IdEmpleado
-                          AND a.Tipo = 'entrada'
-                          AND CAST(a.FechaHora AS date) BETWEEN p2.FechaInicio AND p2.FechaFin
+                        SELECT COUNT(*) 
+                        FROM (
+                            SELECT DISTINCT CAST(a.FechaHora AS date) AS Dia
+                            FROM Asistencias a
+                            WHERE a.IdEmpleado = e.IdEmpleado
+                              AND a.Tipo = 'entrada'
+                              AND CAST(a.FechaHora AS date) BETWEEN p.FechaInicio AND p.FechaFin
+                        ) d
                     ), 0) AS DiasLaborados,
                     -- Número IGSS (columna dedicada)
                     e.NumeroIGSS AS NumeroIGSS,
-                    -- Total deducciones
+                    -- Total deducciones (según tipo del catálogo)
                     ISNULL((
                         SELECT SUM(i.Monto)
                         FROM RegistrosNomina rn
                         JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
                         WHERE rn.IdPeriodo = p.IdPeriodo
                           AND rn.IdEmpleado = e.IdEmpleado
-                          AND i.TipoItem = 'deduccion'
+                          AND b.Tipo = 'deduccion'
                     ), 0) AS TotalDeducciones,
-                    -- Total bonificaciones (prestaciones)
+                    -- Total bonificaciones (prestaciones) (según tipo del catálogo)
                     ISNULL((
                         SELECT SUM(i.Monto)
                         FROM RegistrosNomina rn
                         JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
                         WHERE rn.IdPeriodo = p.IdPeriodo
                           AND rn.IdEmpleado = e.IdEmpleado
-                          AND i.TipoItem = 'prestacion'
+                          AND b.Tipo = 'prestacion'
                     ), 0) AS TotalBonificaciones,
                     -- IGSS calculado por ItemsNomina con Beneficio 'IGSS'
                     ISNULL((
@@ -280,10 +447,49 @@ def _consultar_detalle_periodo(id_periodo: int):
                           AND rn.IdEmpleado = e.IdEmpleado
                           AND i.TipoItem = 'deduccion'
                           AND b.Nombre = 'ISR'
-                    ), 0) AS DescuentoISR
+                    ), 0) AS DescuentoISR,
+                    -- Salario bruto (base + bonificaciones)
+                    (rn0.SalarioBase + ISNULL((
+                        SELECT SUM(i.Monto)
+                        FROM RegistrosNomina rn
+                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
+                        WHERE rn.IdPeriodo = p.IdPeriodo
+                          AND rn.IdEmpleado = e.IdEmpleado
+                          AND b.Tipo = 'prestacion'
+                    ), 0)) AS SalarioBruto,
+                    -- Salario neto (base + bonificaciones - deducciones)
+                    (rn0.SalarioBase + ISNULL((
+                        SELECT SUM(i.Monto)
+                        FROM RegistrosNomina rn
+                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
+                        WHERE rn.IdPeriodo = p.IdPeriodo
+                          AND rn.IdEmpleado = e.IdEmpleado
+                          AND b.Tipo = 'prestacion'
+                    ), 0)
+                    - ISNULL((
+                        SELECT SUM(i.Monto)
+                        FROM RegistrosNomina rn
+                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
+                        WHERE rn.IdPeriodo = p.IdPeriodo
+                          AND rn.IdEmpleado = e.IdEmpleado
+                          AND b.Tipo = 'deduccion'
+                    ), 0)) AS SalarioNeto,
+                    -- IdNomina (para acciones, no se exporta en CSV)
+                    (
+                        SELECT TOP 1 rn.IdNomina
+                        FROM RegistrosNomina rn
+                        WHERE rn.IdPeriodo = p.IdPeriodo AND rn.IdEmpleado = e.IdEmpleado
+                        ORDER BY rn.IdNomina DESC
+                    ) AS IdNomina
                 FROM Empleados e
                 CROSS JOIN PeriodosNomina p
+                LEFT JOIN RegistrosNomina rn0 ON rn0.IdEmpleado = e.IdEmpleado AND rn0.IdPeriodo = p.IdPeriodo
                 WHERE p.IdPeriodo = ?
+                  AND e.FechaContratacion <= p.FechaFin
+                  AND (e.FechaFin IS NULL OR e.FechaFin >= p.FechaInicio)
                 ORDER BY e.Apellidos, e.Nombres
                 """,
                 (id_periodo,),
@@ -319,9 +525,12 @@ def periodo_csv(id_periodo: int):
             "TotalBonificaciones",
             "IGSSMonto",
             "DescuentoISR",
+            "SalarioBruto",
+            "SalarioNeto",
         ])
         for r in datos:
-            writer.writerow(list(r))
+            # Excluir cualquier columna agregada al final (p.ej., IdNomina para acciones)
+            writer.writerow(list(r)[:12])
         csv_data = output.getvalue()
         output.close()
 
@@ -418,6 +627,96 @@ def beneficios_toggle(bid: int):
     return redirect(url_for("beneficios_listado"))
 
 
+@app.route("/catalogos/beneficios/<int:bid>/editar", methods=["GET", "POST"])
+def beneficios_editar(bid: int):
+    if request.method == "POST":
+        nombre = request.form.get("nombre")
+        tipo = request.form.get("tipo")
+        tipo_calc = request.form.get("tipo_calculo")
+        valor = request.form.get("valor")
+        descripcion = request.form.get("descripcion")
+        try:
+            valor_num = float(valor)
+        except Exception:
+            flash("Valor inválido.", "warning")
+            return redirect(url_for("beneficios_editar", bid=bid))
+
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE BeneficiosDeducciones
+                        SET Nombre = ?, Tipo = ?, TipoCalculo = ?, Valor = ?, Descripcion = ?
+                        WHERE IdBeneficioDeduccion = ?
+                        """,
+                        (nombre, tipo, tipo_calc, valor_num, descripcion, bid),
+                    )
+                    conn.commit()
+            flash("Registro actualizado.", "success")
+            return redirect(url_for("beneficios_listado"))
+        except Exception as e:
+            flash(f"No se pudo actualizar: {e}", "danger")
+            return redirect(url_for("beneficios_editar", bid=bid))
+
+    # GET: cargar el registro
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT IdBeneficioDeduccion, Nombre, Tipo, TipoCalculo, Valor, Activo, Descripcion FROM BeneficiosDeducciones WHERE IdBeneficioDeduccion = ?",
+                    (bid,),
+                )
+                row = cur.fetchone()
+        if not row:
+            flash("Registro no encontrado.", "warning")
+            return redirect(url_for("beneficios_listado"))
+        return render_template("beneficios/edit.html", item=row)
+    except Exception as e:
+        flash(f"Error cargando registro: {e}", "danger")
+        return redirect(url_for("beneficios_listado"))
+
+
+@app.route("/catalogos/beneficios/<int:bid>/eliminar", methods=["POST"])
+def beneficios_eliminar(bid: int):
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Eliminar primero items que lo referencian
+                cur.execute("DELETE FROM ItemsNomina WHERE IdBeneficioDeduccion = ?", (bid,))
+                # Luego el catálogo
+                cur.execute("DELETE FROM BeneficiosDeducciones WHERE IdBeneficioDeduccion = ?", (bid,))
+            conn.commit()
+        flash("Beneficio/Deducción eliminado.", "success")
+    except Exception as e:
+        flash(f"No se pudo eliminar: {e}", "danger")
+    return redirect(url_for("beneficios_listado"))
+
+
+@app.route("/nomina/periodos/<int:id_periodo>/eliminar", methods=["POST"])
+def periodos_eliminar(id_periodo: int):
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Borrar Items de todos los registros del periodo
+                cur.execute(
+                    """
+                    DELETE i
+                    FROM ItemsNomina i
+                    JOIN RegistrosNomina rn ON rn.IdNomina = i.IdNomina
+                    WHERE rn.IdPeriodo = ?
+                    """,
+                    (id_periodo,),
+                )
+                # Borrar registros nómina del periodo
+                cur.execute("DELETE FROM RegistrosNomina WHERE IdPeriodo = ?", (id_periodo,))
+                # Borrar el periodo
+                cur.execute("DELETE FROM PeriodosNomina WHERE IdPeriodo = ?", (id_periodo,))
+            conn.commit()
+        flash("Periodo eliminado.", "success")
+    except Exception as e:
+        flash(f"No se pudo eliminar el periodo: {e}", "danger")
+    return redirect(url_for("periodos_listado"))
 # =============================
 # Control de Asistencia (esquema sugerido)
 # =============================
@@ -530,20 +829,22 @@ def empleados_listado():
 @app.route("/empleados/nuevo", methods=["GET", "POST"])
 def empleados_nuevo():
     if request.method == "POST":
-        codigo = request.form.get("codigo")
-        nombres = request.form.get("nombres")
-        apellidos = request.form.get("apellidos")
-        fecha_inicio = request.form.get("fecha_inicio")
-        fecha_fin = request.form.get("fecha_fin") or None
-        salario = request.form.get("salario")
-        dpi = request.form.get("dpi")
-        igss = request.form.get("igss")
-        fecha_nac = request.form.get("fecha_nacimiento") or None
+        codigo = (request.form.get("codigo") or "").strip()
+        nombres = (request.form.get("nombres") or "").strip()
+        apellidos = (request.form.get("apellidos") or "").strip()
+        fecha_inicio = (request.form.get("fecha_inicio") or "").strip()
+        fecha_fin = (request.form.get("fecha_fin") or "").strip() or None
+        salario = (request.form.get("salario") or "").strip()
+        dpi = (request.form.get("dpi") or "").strip()
+        igss = (request.form.get("igss") or "").strip() or None
+        correo = (request.form.get("correo") or "").strip() or None
+        fecha_nac = (request.form.get("fecha_nacimiento") or "").strip() or None
 
-        if not (codigo and nombres and apellidos and fecha_inicio and salario and dpi):
-            flash("Código, Nombres, Apellidos, Fecha de inicio, Salario y DPI son obligatorios.", "warning")
+        if not codigo:
+            codigo = f"EMP-{int(datetime.now().timestamp())}"
+        if not (nombres and apellidos and fecha_inicio and salario and dpi):
+            flash("Nombres, Apellidos, Fecha de inicio, Salario y DPI son obligatorios.", "warning")
             return render_template("empleados/new.html")
-
         try:
             salario_num = float(salario)
             if salario_num < 0:
@@ -555,23 +856,40 @@ def empleados_nuevo():
         try:
             with get_connection() as conn:
                 with conn.cursor() as cur:
+                    # Unicidad básicas
+                    cur.execute("SELECT COUNT(1) FROM Empleados WHERE CodigoEmpleado = ?", (codigo,))
+                    if cur.fetchone()[0]:
+                        flash("El código de empleado ya existe.", "warning")
+                        return render_template("empleados/new.html")
+                    cur.execute("SELECT COUNT(1) FROM Empleados WHERE DocumentoIdentidad = ?", (dpi,))
+                    if cur.fetchone()[0]:
+                        flash("El DPI ya existe en otro empleado.", "warning")
+                        return render_template("empleados/new.html")
+                    if igss:
+                        cur.execute("SELECT COUNT(1) FROM Empleados WHERE NumeroIGSS = ?", (igss,))
+                        if cur.fetchone()[0]:
+                            flash("El Número IGSS ya existe en otro empleado.", "warning")
+                            return render_template("empleados/new.html")
+                    if correo:
+                        cur.execute("SELECT COUNT(1) FROM Empleados WHERE Correo = ?", (correo,))
+                        if cur.fetchone()[0]:
+                            flash("El correo ya existe en otro empleado.", "warning")
+                            return render_template("empleados/new.html")
+
+                    fi = fecha_inicio if fecha_inicio else None
+                    ff = fecha_fin if fecha_fin else None
+                    fn = fecha_nac if fecha_nac else None
                     cur.execute(
                         """
                         INSERT INTO Empleados (
-                            CodigoEmpleado, Nombres, Apellidos, DocumentoIdentidad, 
-                            FechaContratacion, FechaFin, SalarioBase, NumeroIGSS, FechaNacimiento
-                        ) VALUES (?,?,?,?,?,?,?,?,?)
+                            CodigoEmpleado, Nombres, Apellidos, DocumentoIdentidad,
+                            FechaContratacion, FechaFin, SalarioBase, NumeroIGSS, FechaNacimiento,
+                            Correo
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?)
                         """,
                         (
-                            codigo,
-                            nombres,
-                            apellidos,
-                            dpi,
-                            fecha_inicio,
-                            fecha_fin,
-                            salario_num,
-                            igss,
-                            fecha_nac,
+                            codigo, nombres, apellidos, dpi,
+                            fi, ff, salario_num, igss, fn, correo
                         ),
                     )
                     conn.commit()
@@ -582,6 +900,124 @@ def empleados_nuevo():
             return render_template("empleados/new.html")
 
     return render_template("empleados/new.html")
+
+
+@app.route("/empleados/<int:id_empleado>/beneficios", methods=["GET", "POST"])
+def empleados_beneficios(id_empleado: int):
+    if request.method == "POST":
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Recorremos todos los beneficios del catálogo para leer overrides del form
+                    cur.execute("SELECT IdBeneficioDeduccion FROM BeneficiosDeducciones ORDER BY IdBeneficioDeduccion")
+                    ids = [row[0] for row in cur.fetchall()]
+                    for bid in ids:
+                        activo = 1 if request.form.get(f"activo_{bid}") == 'on' else 0
+                        tipo_calc = request.form.get(f"tipo_calculo_{bid}") or None
+                        valor_txt = request.form.get(f"valor_{bid}")
+                        valor = None
+                        if valor_txt is not None and valor_txt != "":
+                            try:
+                                valor = float(valor_txt)
+                            except Exception:
+                                # si valor invalido, ignoramos y mantenemos None
+                                valor = None
+
+                        # upsert sencillo
+                        cur.execute(
+                            "SELECT 1 FROM EmpleadoBeneficios WHERE IdEmpleado = ? AND IdBeneficioDeduccion = ?",
+                            (id_empleado, bid),
+                        )
+                        exists = cur.fetchone()
+                        if exists:
+                            cur.execute(
+                                """
+                                UPDATE EmpleadoBeneficios
+                                SET Activo = ?, TipoCalculo = ?, Valor = ?
+                                WHERE IdEmpleado = ? AND IdBeneficioDeduccion = ?
+                                """,
+                                (activo, tipo_calc, valor, id_empleado, bid),
+                            )
+                        else:
+                            cur.execute(
+                                """
+                                INSERT INTO EmpleadoBeneficios (IdEmpleado, IdBeneficioDeduccion, Activo, TipoCalculo, Valor)
+                                VALUES (?, ?, ?, ?, ?)
+                                """,
+                                (id_empleado, bid, activo, tipo_calc, valor),
+                            )
+                conn.commit()
+            flash("Cambios guardados.", "success")
+        except Exception as e:
+            flash(f"No se pudo guardar: {e}", "danger")
+        return redirect(url_for("empleados_beneficios", id_empleado=id_empleado))
+
+    # GET: listar catálogo con overrides del empleado
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT b.IdBeneficioDeduccion, b.Nombre, b.Tipo, b.TipoCalculo, b.Valor, b.Activo,
+                           eb.Activo as EBActivo, eb.TipoCalculo as EBTipoCalculo, eb.Valor as EBValor
+                    FROM BeneficiosDeducciones b
+                    LEFT JOIN EmpleadoBeneficios eb ON eb.IdBeneficioDeduccion = b.IdBeneficioDeduccion AND eb.IdEmpleado = ?
+                    ORDER BY b.Tipo, b.Nombre
+                    """,
+                    (id_empleado,),
+                )
+                filas = cur.fetchall()
+                # info empleado
+                cur.execute("SELECT IdEmpleado, Nombres, Apellidos FROM Empleados WHERE IdEmpleado = ?", (id_empleado,))
+                emp = cur.fetchone()
+        if not emp:
+            flash("Empleado no encontrado.", "warning")
+            return redirect(url_for("empleados_listado"))
+        return render_template("empleados/beneficios.html", filas=filas, emp=emp)
+    except Exception as e:
+        flash(f"Error cargando beneficios del empleado: {e}", "danger")
+        return redirect(url_for("empleados_listado"))
+
+@app.route("/empleados/<int:id_empleado>/eliminar", methods=["POST"])
+def empleados_eliminar(id_empleado: int):
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Eliminar dependencias de nómina del empleado
+                cur.execute(
+                    """
+                    DELETE i
+                    FROM ItemsNomina i
+                    JOIN RegistrosNomina rn ON rn.IdNomina = i.IdNomina
+                    WHERE rn.IdEmpleado = ?
+                    """,
+                    (id_empleado,),
+                )
+                cur.execute("DELETE FROM RegistrosNomina WHERE IdEmpleado = ?", (id_empleado,))
+                # Asistencias tiene ON DELETE CASCADE (según DDL sugerido)
+                # Finalmente eliminar empleado
+                cur.execute("DELETE FROM Empleados WHERE IdEmpleado = ?", (id_empleado,))
+            conn.commit()
+        flash("Empleado eliminado.", "success")
+    except Exception as e:
+        flash(f"No se pudo eliminar el empleado: {e}", "danger")
+    return redirect(url_for("empleados_listado"))
+
+
+@app.route("/nomina/registros/<int:id_nomina>/eliminar", methods=["POST"])
+def registro_nomina_eliminar(id_nomina: int):
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Borrar items dependientes primero
+                cur.execute("DELETE FROM ItemsNomina WHERE IdNomina = ?", (id_nomina,))
+                # Borrar el registro de nómina
+                cur.execute("DELETE FROM RegistrosNomina WHERE IdNomina = ?", (id_nomina,))
+            conn.commit()
+        flash("Registro de nómina eliminado.", "success")
+    except Exception as e:
+        flash(f"No se pudo eliminar el registro de nómina: {e}", "danger")
+    return redirect(url_for("periodos_listado"))
 
 
 if __name__ == "__main__":

@@ -1,35 +1,69 @@
 {% extends 'base.html' %}
-{% block title %}Nuevo Periodo de Nómina{% endblock %}
-
 {% block content %}
 <section class="section">
   <div class="card auth-card" style="max-width:640px;">
-    <h2 class="card-title">Nuevo periodo</h2>
-    <p class="card-subtitle">Define las fechas y el tipo de periodo</p>
+    <h2 class="card-title">Nuevo período</h2>
+    <p class="card-subtitle">Selecciona modalidad y período</p>
 
     <form method="post" class="form">
       <div class="form-group">
-        <label for="fecha_inicio">Fecha inicio</label>
-        <input type="date" id="fecha_inicio" name="fecha_inicio" required />
-      </div>
-      <div class="form-group">
-        <label for="fecha_fin">Fecha fin</label>
-        <input type="date" id="fecha_fin" name="fecha_fin" required />
-      </div>
-      <div class="form-group">
-        <label for="tipo_periodo">Tipo de periodo</label>
-        <select id="tipo_periodo" name="tipo_periodo" required style="padding:12px 14px; border-radius:10px; background:#0b1328; color:var(--text); border:1px solid #1f2a44;">
+        <label for="modalidad">Modalidad</label>
+        <select id="modalidad" name="modalidad" required style="padding:12px 14px; border-radius:10px; background:#0b1328; color:var(--text); border:1px solid #1f2a44;">
           <option value="mensual">Mensual</option>
           <option value="quincenal">Quincenal</option>
-          <option value="semanal">Semanal</option>
-          <option value="anual">Anual</option>
+        </select>
+      </div>
+      <div class="form-group" style="display:flex; gap:12px;">
+        <div style="flex:2;">
+          <label for="mes">Mes</label>
+          <select id="mes" name="mes" required style="width:100%; padding:12px 14px; border-radius:10px; background:#0b1328; color:var(--text); border:1px solid #1f2a44;">
+            <option value="1">Enero</option>
+            <option value="2">Febrero</option>
+            <option value="3">Marzo</option>
+            <option value="4">Abril</option>
+            <option value="5">Mayo</option>
+            <option value="6">Junio</option>
+            <option value="7">Julio</option>
+            <option value="8">Agosto</option>
+            <option value="9">Septiembre</option>
+            <option value="10">Octubre</option>
+            <option value="11">Noviembre</option>
+            <option value="12">Diciembre</option>
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label for="anio">Año</label>
+          <input id="anio" name="anio" type="number" min="2000" max="2100" required />
+        </div>
+      </div>
+      <div class="form-group" id="grpQuincena" style="display:none;">
+        <label for="quincena">Quincena</label>
+        <select id="quincena" name="quincena" style="padding:12px 14px; border-radius:10px; background:#0b1328; color:var(--text); border:1px solid #1f2a44;">
+          <option value="1">Primera (1 al 15)</option>
+          <option value="2">Segunda (16 al fin de mes)</option>
         </select>
       </div>
       <div style="display:flex; gap:10px;">
-        <button type="submit" class="btn btn-primary">Crear periodo</button>
+        <button type="submit" class="btn btn-primary">Crear período</button>
         <a class="btn btn-outline" href="{{ url_for('periodos_listado') }}">Volver</a>
       </div>
     </form>
   </div>
 </section>
+<script>
+  (function(){
+    const modalidad = document.getElementById('modalidad');
+    const grpQ = document.getElementById('grpQuincena');
+    const anio = document.getElementById('anio');
+    function update(){
+      grpQ.style.display = modalidad.value === 'quincenal' ? 'block' : 'none';
+    }
+    modalidad.addEventListener('change', update);
+    update();
+    // Default: año actual si vacío
+    try{
+      if(anio && !anio.value){ anio.value = new Date().getFullYear(); }
+    }catch(e){}
+  })();
+</script>
 {% endblock %}
