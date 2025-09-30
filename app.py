@@ -1019,6 +1019,35 @@ def registro_nomina_eliminar(id_nomina: int):
         flash(f"No se pudo eliminar el registro de nómina: {e}", "danger")
     return redirect(url_for("periodos_listado"))
 
+ # HECHO POR JAMES
+@app.route("/reportes", methods=["GET", "POST"])
+def reportes():
+    if request.method == "POST":
+        depto = request.form.get("departamento")
+        fecha = request.form.get("fecha")
+        # TODO: Lógica para generar reporte
+        return f"Reporte generado para {depto} en fecha {fecha}"
+    return render_template("reportes.html")
+
+
+@app.route("/comprobantes", methods=["GET", "POST"])
+def comprobantes():
+    if request.method == "POST":
+        empleado = request.form.get("empleado")
+        # TODO: lógica para generar comprobante
+        return f"Comprobante generado para {empleado}"
+    return render_template("comprobantes.html")
+
+
+@app.route("/seguridad", methods=["GET", "POST"])
+def seguridad():
+    if request.method == "POST":
+        usuario = request.form.get("usuario")
+        rol = request.form.get("rol")
+        # TODO: lógica para asignar rol
+        return f"Rol {rol} asignado a usuario {usuario}"
+    return render_template("seguridad.html")
+#Hecho por James hasta aca
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.getenv("PORT", 5000)), debug=True)

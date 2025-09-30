@@ -19,6 +19,12 @@
       <div class="brand">Nómina</div>
     </div>
     <nav>
+      <!-- Esto lo hizo James -->
+      <li><a href="/reportes"> Reportes</a></li> 
+      <li><a href="/comprobantes"> Comprobantes</a></li>
+      <li><a href="/seguridad"> Seguridad</a></li>
+      <!-- Hasta aca -->
+
       {% if session.get('user_id') %}
         <a class="btn btn-link" href="{{ url_for('dashboard') }}">Inicio</a>
         <a class="btn btn-outline" href="{{ url_for('logout') }}">Salir</a>
