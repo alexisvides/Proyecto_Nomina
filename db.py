@@ -24,7 +24,7 @@ def _get_driver() -> str:
 
 
 def _build_connection_string() -> str:
-    server = "VICTUS-JAMES\\SQLSERVER"
+    server = "VICTUS-JAMES"
     database = "proyecto"
     username = "sa"
     password = "123"

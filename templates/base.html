@@ -19,12 +19,6 @@
       <div class="brand">Nómina</div>
     </div>
     <nav>
-      <!-- Esto lo hizo James -->
-      <li><a href="/reportes"> Reportes</a></li> 
-      <li><a href="/comprobantes"> Comprobantes</a></li>
-      <li><a href="/seguridad"> Seguridad</a></li>
-      <!-- Hasta aca -->
-
       {% if session.get('user_id') %}
         <a class="btn btn-link" href="{{ url_for('dashboard') }}">Inicio</a>
         <a class="btn btn-outline" href="{{ url_for('logout') }}">Salir</a>
@@ -56,13 +50,14 @@
       <div class="sidebar-section">
         <div class="sidebar-title">Operación</div>
         <a class="nav-link{% if request.endpoint in ['asistencia_listado','asistencia_nuevo'] %} active{% endif %}" href="{{ url_for('asistencia_listado') }}" aria-current="{% if request.endpoint in ['asistencia_listado','asistencia_nuevo'] %}page{% endif %}">Asistencia</a>
-        <a class="nav-link" href="#">Reportes</a>
-        <a class="nav-link" href="#">Comprobantes</a>
+  <a class="nav-link{% if request.endpoint == 'reportes' %} active{% endif %}" href="{{ url_for('reportes') }}" aria-current="{% if request.endpoint == 'reportes' %}page{% endif %}">Reportes</a>
+  <a class="nav-link{% if request.endpoint == 'comprobantes' %} active{% endif %}" href="{{ url_for('comprobantes') }}" aria-current="{% if request.endpoint == 'comprobantes' %}page{% endif %}">Comprobantes</a>
       </div>
       <div class="sidebar-section">
         <div class="sidebar-title">Seguridad</div>
         <a class="nav-link" href="#">Usuarios y Roles</a>
         <a class="nav-link" href="#">Auditoría</a>
+    <a class="nav-link{% if request.endpoint == 'seguridad' %} active{% endif %}" href="{{ url_for('seguridad') }}" aria-current="{% if request.endpoint == 'seguridad' %}page{% endif %}">Seguridad</a>
       </div>
     </aside>
     {% endif %}

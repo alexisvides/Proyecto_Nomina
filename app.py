@@ -5,6 +5,10 @@ from db import get_connection
 from datetime import datetime
 import io
 import csv
+import pandas as pd
+from flask import send_file
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
 
 # Cargar variables de entorno
 load_dotenv()
@@ -1019,34 +1023,278 @@ def registro_nomina_eliminar(id_nomina: int):
         flash(f"No se pudo eliminar el registro de nómina: {e}", "danger")
     return redirect(url_for("periodos_listado"))
 
- # HECHO POR JAMES
-@app.route("/reportes", methods=["GET", "POST"])
-def reportes():
+# HECHO POR JAMES
+# =========================
+#   REPORTES
+# =========================
+app = Flask(__name__)
+
+@app.route("/reportes", endpoint="reportes_listado", methods=["GET", "POST"])
+def reportes_listado():
+    data = []
+    filtro_depto = request.form.get("departamento", "")
+    filtro_fecha = request.form.get("fecha", "")
+    filtro_cargo = request.form.get("cargo", "")
+    exportar = request.form.get("exportar")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Consulta dinámica con filtros
+    query = """
+        SELECT e.Nombre, e.Departamento, e.Cargo, e.Salario, e.FechaIngreso, e.Vacaciones
+        FROM Empleados e
+        WHERE (@depto = '' OR e.Departamento = @depto)
+          AND (@fecha = '' OR CONVERT(date, e.FechaIngreso) = @fecha)
+          AND (@cargo = '' OR e.Cargo = @cargo)
+    """
+
+    cursor.execute(query, {'depto': filtro_depto, 'fecha': filtro_fecha, 'cargo': filtro_cargo})
+    columns = [column[0] for column in cursor.description]
+    rows = cursor.fetchall()
+
+    for row in rows:
+        data.append(dict(zip(columns, row)))
+
+    cursor.close()
+    conn.close()
+
+    # Exportaciones
+    if exportar and data:
+        df = pd.DataFrame(data)
+        if exportar == "csv":
+            buffer = io.StringIO()
+            df.to_csv(buffer, index=False)
+            buffer.seek(0)
+            return send_file(io.BytesIO(buffer.getvalue().encode()), as_attachment=True,
+                             download_name="reporte.csv", mimetype="text/csv")
+
+        elif exportar == "excel":
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                df.to_excel(writer, index=False, sheet_name="Reporte")
+            buffer.seek(0)
+            return send_file(buffer, as_attachment=True,
+                             download_name="reporte.xlsx",
+                             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        elif exportar == "pdf":
+            buffer = io.BytesIO()
+            c = canvas.Canvas(buffer, pagesize=letter)
+            c.drawString(100, 750, "Reporte de Empleados")
+            y = 720
+            for row in data:
+                texto = f"{row['Nombre']} | {row['Departamento']} | {row['Cargo']} | {row['Salario']} | Vacaciones: {row['Vacaciones']}"
+                c.drawString(50, y, texto)
+                y -= 20
+                if y < 50:
+                    c.showPage()
+                    y = 750
+            c.save()
+            buffer.seek(0)
+            return send_file(buffer, as_attachment=True,
+                             download_name="reporte.pdf",
+                             mimetype="application/pdf")
+
+    return render_template("Reportes/reportes.html", data=data)
+
+
+# =========================
+#   COMPROBANTES
+# =========================
+app = Flask(__name__)
+app.secret_key = "clave_segura"
+
+@app.route("/comprobantes", endpoint="comprobantes_listado", methods=["GET", "POST"])
+def comprobantes_listado():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Mostrar empleados con nómina generada
+    cursor.execute("""
+        SELECT DISTINCT e.IdEmpleado, e.Nombres + ' ' + e.Apellidos AS NombreCompleto
+        FROM Empleados e
+        INNER JOIN RegistrosNomina rn ON rn.IdEmpleado = e.IdEmpleado
+        ORDER BY NombreCompleto;
+    """)
+    empleados = cursor.fetchall()
+
+    comprobante_generado = None
+
     if request.method == "POST":
-        depto = request.form.get("departamento")
-        fecha = request.form.get("fecha")
-        # TODO: Lógica para generar reporte
-        return f"Reporte generado para {depto} en fecha {fecha}"
-    return render_template("reportes.html")
+        empleado_id = request.form.get("empleado")
+        accion = request.form.get("accion")
+
+        # Consulta de nómina más reciente para el empleado
+        cursor.execute("""
+            SELECT TOP 1 
+                e.Nombres + ' ' + e.Apellidos AS NombreCompleto,
+                d.Nombre AS Departamento,
+                p.Titulo AS Puesto,
+                rn.SalarioBase, rn.TotalPrestaciones, rn.TotalDeducciones,
+                rn.SalarioNeto, pn.FechaInicio, pn.FechaFin
+            FROM RegistrosNomina rn
+            INNER JOIN Empleados e ON rn.IdEmpleado = e.IdEmpleado
+            INNER JOIN PeriodosNomina pn ON rn.IdPeriodo = pn.IdPeriodo
+            LEFT JOIN Departamentos d ON e.IdDepartamento = d.IdDepartamento
+            LEFT JOIN Puestos p ON e.IdPuesto = p.IdPuesto
+            WHERE e.IdEmpleado = ?
+            ORDER BY rn.FechaGeneracion DESC;
+        """, (empleado_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            flash("No se encontró una nómina reciente para este empleado.", "warning")
+            return render_template("Comprobantes/comprobantes.html", empleados=empleados)
+
+        (nombre, depto, puesto, base, prest, deduc, neto, f_ini, f_fin) = row
+
+        # Firma digital simple
+        firma = str(abs(hash(nombre + str(f_fin))) % 1000000)
+
+        # Crear comprobante PDF
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=letter)
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(200, 760, "Comprobante de Pago - Nómina")
+        c.setFont("Helvetica", 11)
+        c.line(50, 750, 550, 750)
+
+        c.drawString(50, 720, f"Empleado: {nombre}")
+        c.drawString(50, 700, f"Departamento: {depto or 'N/A'}")
+        c.drawString(50, 680, f"Puesto: {puesto or 'N/A'}")
+        c.drawString(50, 660, f"Período: {f_ini.strftime('%Y-%m-%d')} a {f_fin.strftime('%Y-%m-%d')}")
+        c.line(50, 650, 550, 650)
+        c.drawString(50, 630, f"Salario Base: Q {base:,.2f}")
+        c.drawString(50, 610, f"Prestaciones: Q {prest:,.2f}")
+        c.drawString(50, 590, f"Deducciones: Q {deduc:,.2f}")
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(50, 570, f"Salario Neto: Q {neto:,.2f}")
+        c.setFont("Helvetica", 10)
+        c.line(50, 560, 550, 560)
+        c.drawString(50, 540, f"Firma Digital: {firma}")
+        c.save()
+        buffer.seek(0)
+
+        # Guardar comprobante en historial
+        cursor.execute("""
+            INSERT INTO ComprobantesEmitidos (IdNomina, FirmaDigital)
+            SELECT TOP 1 rn.IdNomina, ? 
+            FROM RegistrosNomina rn
+            WHERE rn.IdEmpleado = ?
+            ORDER BY rn.FechaGeneracion DESC;
+        """, (firma, empleado_id))
+        conn.commit()
+
+        comprobante_generado = nombre
+
+        return send_file(buffer, as_attachment=True,
+                         download_name=f"comprobante_{nombre}.pdf",
+                         mimetype="application/pdf")
+
+    cursor.close()
+    conn.close()
+    return render_template("Comprobantes/comprobantes.html", empleados=empleados)
 
 
-@app.route("/comprobantes", methods=["GET", "POST"])
-def comprobantes():
+# =========================
+#   SEGURIDAD
+# =========================
+@app.route("/seguridad", endpoint="seguridad_listado", methods=["GET", "POST"])
+def seguridad_listado():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Obtener usuarios y roles disponibles
+    cursor.execute("SELECT IdUsuario, NombreUsuario FROM Usuarios ORDER BY NombreUsuario ASC")
+    usuarios = cursor.fetchall()
+
+    cursor.execute("SELECT IdRol, Nombre FROM Roles ORDER BY Nombre ASC")
+    roles = cursor.fetchall()
+
+    # Asignaciones existentes
+    cursor.execute("""
+        SELECT u.NombreUsuario, r.Nombre AS Rol
+        FROM UsuarioRol ur
+        INNER JOIN Usuarios u ON ur.IdUsuario = u.IdUsuario
+        INNER JOIN Roles r ON ur.IdRol = r.IdRol
+        ORDER BY u.NombreUsuario;
+    """)
+    asignaciones = cursor.fetchall()
+
     if request.method == "POST":
-        empleado = request.form.get("empleado")
-        # TODO: lógica para generar comprobante
-        return f"Comprobante generado para {empleado}"
-    return render_template("comprobantes.html")
+        usuario_id = request.form.get("usuario")
+        rol_id = request.form.get("rol")
+        accion = request.form.get("accion")
+
+        # Asignar nuevo rol
+        if accion == "asignar":
+            try:
+                cursor.execute("""
+                    IF NOT EXISTS (
+                        SELECT 1 FROM UsuarioRol WHERE IdUsuario = ? AND IdRol = ?
+                    )
+                    INSERT INTO UsuarioRol (IdUsuario, IdRol) VALUES (?, ?);
+                """, (usuario_id, rol_id, usuario_id, rol_id))
+                conn.commit()
+
+                # Registrar acción en auditoría
+                cursor.execute("""
+                    INSERT INTO Auditoria (IdUsuario, Accion)
+                    VALUES (?, ?)
+                """, (usuario_id, f"Asignó rol ID={rol_id} al usuario ID={usuario_id}"))
+                conn.commit()
+
+                flash("Rol asignado correctamente.", "success")
+
+            except Exception as e:
+                conn.rollback()
+                flash(f"Error al asignar rol: {e}", "danger")
+
+        # Eliminar rol
+        elif accion == "eliminar":
+            try:
+                cursor.execute("""
+                    DELETE FROM UsuarioRol WHERE IdUsuario = ? AND IdRol = ?;
+                """, (usuario_id, rol_id))
+                conn.commit()
+
+                cursor.execute("""
+                    INSERT INTO Auditoria (IdUsuario, Accion)
+                    VALUES (?, ?)
+                """, (usuario_id, f"Eliminó rol ID={rol_id} del usuario ID={usuario_id}"))
+                conn.commit()
+
+                flash("Rol eliminado correctamente.", "warning")
+            except Exception as e:
+                conn.rollback()
+                flash(f"Error al eliminar rol: {e}", "danger")
+
+        return redirect(url_for("seguridad_listado"))
+
+    cursor.close()
+    conn.close()
+
+    return render_template("Seguridad/seguridad.html", usuarios=usuarios, roles=roles, asignaciones=asignaciones)
 
 
-@app.route("/seguridad", methods=["GET", "POST"])
-def seguridad():
-    if request.method == "POST":
-        usuario = request.form.get("usuario")
-        rol = request.form.get("rol")
-        # TODO: lógica para asignar rol
-        return f"Rol {rol} asignado a usuario {usuario}"
-    return render_template("seguridad.html")
+# ==============================
+#   Módulo de Auditoría
+# ==============================
+@app.route("/auditoria", endpoint="auditoria_listado")
+def auditoria_listado():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT TOP 50 a.IdAuditoria, u.NombreUsuario, a.Accion, a.Fecha
+        FROM Auditoria a
+        LEFT JOIN Usuarios u ON a.IdUsuario = u.IdUsuario
+        ORDER BY a.Fecha DESC;
+    """)
+    registros = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template("Seguridad/auditoria.html", registros=registros)
 #Hecho por James hasta aca
 
 if __name__ == "__main__":
