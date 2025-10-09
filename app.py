@@ -5,10 +5,18 @@ from db import get_connection
 from datetime import datetime
 import io
 import csv
+import hashlib
 import pandas as pd
 from flask import send_file
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import landscape
+import importlib
+try:
+    _openpyxl = importlib.import_module("openpyxl")
+    Workbook = getattr(_openpyxl, "Workbook", None)
+except Exception:
+    Workbook = None
 
 # Cargar variables de entorno
 load_dotenv()
@@ -19,8 +27,7 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
 
 @app.route("/", methods=["GET"])
 def index():
-    if session.get("user_id"):
-        return redirect(url_for("dashboard"))
+    # Forzar redirección al login incluso si hay sesión activa
     return redirect(url_for("login"))
 
 
@@ -1023,94 +1030,19 @@ def registro_nomina_eliminar(id_nomina: int):
         flash(f"No se pudo eliminar el registro de nómina: {e}", "danger")
     return redirect(url_for("periodos_listado"))
 
-# HECHO POR JAMES
-# =========================
-#   REPORTES
-# =========================
-app = Flask(__name__)
+# =============================
+# Parte de James
+# =============================
 
-@app.route("/reportes", endpoint="reportes_listado", methods=["GET", "POST"])
-def reportes_listado():
-    data = []
-    filtro_depto = request.form.get("departamento", "")
-    filtro_fecha = request.form.get("fecha", "")
-    filtro_cargo = request.form.get("cargo", "")
-    exportar = request.form.get("exportar")
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    # Consulta dinámica con filtros
-    query = """
-        SELECT e.Nombre, e.Departamento, e.Cargo, e.Salario, e.FechaIngreso, e.Vacaciones
-        FROM Empleados e
-        WHERE (@depto = '' OR e.Departamento = @depto)
-          AND (@fecha = '' OR CONVERT(date, e.FechaIngreso) = @fecha)
-          AND (@cargo = '' OR e.Cargo = @cargo)
-    """
-
-    cursor.execute(query, {'depto': filtro_depto, 'fecha': filtro_fecha, 'cargo': filtro_cargo})
-    columns = [column[0] for column in cursor.description]
-    rows = cursor.fetchall()
-
-    for row in rows:
-        data.append(dict(zip(columns, row)))
-
-    cursor.close()
-    conn.close()
-
-    # Exportaciones
-    if exportar and data:
-        df = pd.DataFrame(data)
-        if exportar == "csv":
-            buffer = io.StringIO()
-            df.to_csv(buffer, index=False)
-            buffer.seek(0)
-            return send_file(io.BytesIO(buffer.getvalue().encode()), as_attachment=True,
-                             download_name="reporte.csv", mimetype="text/csv")
-
-        elif exportar == "excel":
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                df.to_excel(writer, index=False, sheet_name="Reporte")
-            buffer.seek(0)
-            return send_file(buffer, as_attachment=True,
-                             download_name="reporte.xlsx",
-                             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-        elif exportar == "pdf":
-            buffer = io.BytesIO()
-            c = canvas.Canvas(buffer, pagesize=letter)
-            c.drawString(100, 750, "Reporte de Empleados")
-            y = 720
-            for row in data:
-                texto = f"{row['Nombre']} | {row['Departamento']} | {row['Cargo']} | {row['Salario']} | Vacaciones: {row['Vacaciones']}"
-                c.drawString(50, y, texto)
-                y -= 20
-                if y < 50:
-                    c.showPage()
-                    y = 750
-            c.save()
-            buffer.seek(0)
-            return send_file(buffer, as_attachment=True,
-                             download_name="reporte.pdf",
-                             mimetype="application/pdf")
-
-    return render_template("Reportes/reportes.html", data=data)
-
-
-# =========================
-#   COMPROBANTES
-# =========================
-app = Flask(__name__)
-app.secret_key = "clave_segura"
-
+# ============================================================
+# 🔹 MÓDULO DE COMPROBANTES Y RECIBOS DE NÓMINA
+# ============================================================
 @app.route("/comprobantes", endpoint="comprobantes_listado", methods=["GET", "POST"])
 def comprobantes_listado():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Mostrar empleados con nómina generada
+    # Listado de empleados disponibles
     cursor.execute("""
         SELECT DISTINCT e.IdEmpleado, e.Nombres + ' ' + e.Apellidos AS NombreCompleto
         FROM Empleados e
@@ -1119,82 +1051,117 @@ def comprobantes_listado():
     """)
     empleados = cursor.fetchall()
 
-    comprobante_generado = None
-
+    comprobantes = []
     if request.method == "POST":
-        empleado_id = request.form.get("empleado")
         accion = request.form.get("accion")
+        empleado_id = request.form.get("empleado")
 
-        # Consulta de nómina más reciente para el empleado
-        cursor.execute("""
-            SELECT TOP 1 
-                e.Nombres + ' ' + e.Apellidos AS NombreCompleto,
-                d.Nombre AS Departamento,
-                p.Titulo AS Puesto,
-                rn.SalarioBase, rn.TotalPrestaciones, rn.TotalDeducciones,
-                rn.SalarioNeto, pn.FechaInicio, pn.FechaFin
-            FROM RegistrosNomina rn
-            INNER JOIN Empleados e ON rn.IdEmpleado = e.IdEmpleado
-            INNER JOIN PeriodosNomina pn ON rn.IdPeriodo = pn.IdPeriodo
-            LEFT JOIN Departamentos d ON e.IdDepartamento = d.IdDepartamento
-            LEFT JOIN Puestos p ON e.IdPuesto = p.IdPuesto
-            WHERE e.IdEmpleado = ?
-            ORDER BY rn.FechaGeneracion DESC;
-        """, (empleado_id,))
-        row = cursor.fetchone()
+        # 🔸 GENERACIÓN INDIVIDUAL
+        if accion == "individual":
+            cursor.execute("""
+                SELECT TOP 1 
+                    e.Nombres + ' ' + e.Apellidos AS NombreCompleto,
+                    d.Nombre AS Departamento,
+                    p.Titulo AS Puesto,
+                    rn.SalarioBase, rn.TotalPrestaciones, rn.TotalDeducciones,
+                    rn.SalarioNeto, pn.FechaInicio, pn.FechaFin, rn.IdNomina
+                FROM RegistrosNomina rn
+                INNER JOIN Empleados e ON rn.IdEmpleado = e.IdEmpleado
+                INNER JOIN PeriodosNomina pn ON rn.IdPeriodo = pn.IdPeriodo
+                LEFT JOIN Departamentos d ON e.IdDepartamento = d.IdDepartamento
+                LEFT JOIN Puestos p ON e.IdPuesto = p.IdPuesto
+                WHERE e.IdEmpleado = ?
+                ORDER BY rn.FechaGeneracion DESC;
+            """, (empleado_id,))
+            row = cursor.fetchone()
 
-        if not row:
-            flash("No se encontró una nómina reciente para este empleado.", "warning")
-            return render_template("Comprobantes/comprobantes.html", empleados=empleados)
+            if not row:
+                flash(" No se encontró una nómina para este empleado.", "warning")
+                return render_template("Comprobantes/comprobantes.html", empleados=empleados)
 
-        (nombre, depto, puesto, base, prest, deduc, neto, f_ini, f_fin) = row
+            # Datos
+            (nombre, depto, puesto, base, prest, deduc, neto, f_ini, f_fin, id_nomina) = row
 
-        # Firma digital simple
-        firma = str(abs(hash(nombre + str(f_fin))) % 1000000)
+            # Firma digital (hash)
+            firma = hashlib.sha256(f"{id_nomina}{nombre}{f_fin}".encode()).hexdigest()[:16]
 
-        # Crear comprobante PDF
-        buffer = io.BytesIO()
-        c = canvas.Canvas(buffer, pagesize=letter)
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(200, 760, "Comprobante de Pago - Nómina")
-        c.setFont("Helvetica", 11)
-        c.line(50, 750, 550, 750)
+            # Crear PDF
+            buffer = io.BytesIO()
+            c = canvas.Canvas(buffer, pagesize=letter)
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(200, 760, "Comprobante de Pago - Nómina")
+            c.setFont("Helvetica", 11)
+            c.line(50, 750, 550, 750)
+            c.drawString(50, 720, f"Empleado: {nombre}")
+            c.drawString(50, 700, f"Departamento: {depto or 'N/A'}")
+            c.drawString(50, 680, f"Puesto: {puesto or 'N/A'}")
+            c.drawString(50, 660, f"Período: {f_ini.strftime('%Y-%m-%d')} a {f_fin.strftime('%Y-%m-%d')}")
+            c.line(50, 650, 550, 650)
+            c.drawString(50, 630, f"Salario Base: Q {base:,.2f}")
+            c.drawString(50, 610, f"Prestaciones: Q {prest:,.2f}")
+            c.drawString(50, 590, f"Deducciones: Q {deduc:,.2f}")
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(50, 570, f"Salario Neto: Q {neto:,.2f}")
+            c.setFont("Helvetica", 10)
+            c.line(50, 560, 550, 560)
+            c.drawString(50, 540, f"Firma Digital: {firma}")
+            c.save()
+            buffer.seek(0)
+            pdf_bytes = buffer.getvalue()
 
-        c.drawString(50, 720, f"Empleado: {nombre}")
-        c.drawString(50, 700, f"Departamento: {depto or 'N/A'}")
-        c.drawString(50, 680, f"Puesto: {puesto or 'N/A'}")
-        c.drawString(50, 660, f"Período: {f_ini.strftime('%Y-%m-%d')} a {f_fin.strftime('%Y-%m-%d')}")
-        c.line(50, 650, 550, 650)
-        c.drawString(50, 630, f"Salario Base: Q {base:,.2f}")
-        c.drawString(50, 610, f"Prestaciones: Q {prest:,.2f}")
-        c.drawString(50, 590, f"Deducciones: Q {deduc:,.2f}")
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(50, 570, f"Salario Neto: Q {neto:,.2f}")
-        c.setFont("Helvetica", 10)
-        c.line(50, 560, 550, 560)
-        c.drawString(50, 540, f"Firma Digital: {firma}")
-        c.save()
-        buffer.seek(0)
+            # Guardar en DB
+            cursor.execute("""
+                INSERT INTO ComprobantesEmitidos (IdNomina, FirmaDigital, ArchivoPDF)
+                VALUES (?, ?, ?)
+            """, (id_nomina, firma, pdf_bytes))
+            conn.commit()
 
-        # Guardar comprobante en historial
-        cursor.execute("""
-            INSERT INTO ComprobantesEmitidos (IdNomina, FirmaDigital)
-            SELECT TOP 1 rn.IdNomina, ? 
-            FROM RegistrosNomina rn
-            WHERE rn.IdEmpleado = ?
-            ORDER BY rn.FechaGeneracion DESC;
-        """, (firma, empleado_id))
-        conn.commit()
+            flash(" Comprobante generado correctamente.", "success")
 
-        comprobante_generado = nombre
+            return send_file(
+                io.BytesIO(pdf_bytes),
+                as_attachment=True,
+                download_name=f"comprobante_{nombre}.pdf",
+                mimetype="application/pdf"
+            )
 
-        return send_file(buffer, as_attachment=True,
-                         download_name=f"comprobante_{nombre}.pdf",
-                         mimetype="application/pdf")
+        # 🔸 GENERACIÓN MASIVA
+        elif accion == "masiva":
+            cursor.execute("""
+                SELECT rn.IdNomina, e.Nombres + ' ' + e.Apellidos AS NombreCompleto,
+                       rn.SalarioNeto, pn.FechaFin
+                FROM RegistrosNomina rn
+                INNER JOIN Empleados e ON rn.IdEmpleado = e.IdEmpleado
+                INNER JOIN PeriodosNomina pn ON rn.IdPeriodo = pn.IdPeriodo
+                ORDER BY e.Nombres;
+            """)
+            filas = cursor.fetchall()
+
+            for row in filas:
+                id_nomina, nombre, neto, fecha_fin = row
+                firma = hashlib.sha256(f"{id_nomina}{nombre}{fecha_fin}".encode()).hexdigest()[:16]
+                cursor.execute("""
+                    INSERT INTO ComprobantesEmitidos (IdNomina, FirmaDigital)
+                    VALUES (?, ?)
+                """, (id_nomina, firma))
+            conn.commit()
+            flash(f" {len(filas)} comprobantes generados exitosamente.", "success")
+
+        # 🔸 HISTORIAL
+        elif accion == "historial":
+            cursor.execute("""
+                SELECT c.IdComprobante, e.Nombres + ' ' + e.Apellidos AS Empleado, 
+                       c.FechaEmision, c.FirmaDigital
+                FROM ComprobantesEmitidos c
+                INNER JOIN RegistrosNomina rn ON c.IdNomina = rn.IdNomina
+                INNER JOIN Empleados e ON rn.IdEmpleado = e.IdEmpleado
+                ORDER BY c.FechaEmision DESC;
+            """)
+            comprobantes = cursor.fetchall()
 
     cursor.close()
     conn.close()
-    return render_template("Comprobantes/comprobantes.html", empleados=empleados)
+    return render_template("Comprobantes/comprobantes.html", empleados=empleados, comprobantes=comprobantes)
 
 
 # =========================
@@ -1295,7 +1262,171 @@ def auditoria_listado():
     cursor.close()
     conn.close()
     return render_template("Seguridad/auditoria.html", registros=registros)
-#Hecho por James hasta aca
+
+# ============================================================
+# 🔹 MÓDULO DE REPORTES Y EXPORTACIONES
+# ============================================================
+@app.route("/reportes", endpoint="reportes_listado", methods=["GET", "POST"])
+def reportes_listado():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Obtener filtros dinámicos
+    cursor.execute("SELECT IdDepartamento, Nombre FROM Departamentos ORDER BY Nombre;")
+    departamentos = cursor.fetchall()
+    cursor.execute("SELECT IdPuesto, Titulo FROM Puestos ORDER BY Titulo;")
+    cargos = cursor.fetchall()
+
+    data = []
+    formato = request.form.get("formato")
+
+    if request.method == "POST":
+        departamento = request.form.get("departamento") or None
+        cargo = request.form.get("cargo") or None
+        fecha_inicio = request.form.get("fecha_inicio") or "1900-01-01"
+        fecha_fin = request.form.get("fecha_fin") or "2100-12-31"
+
+        # Consulta principal — construir condiciones dinámicamente para usar marcadores ? compatibles con pyodbc
+        base_sql = """
+            SELECT 
+                e.Nombres + ' ' + e.Apellidos AS Empleado,
+                d.Nombre AS Departamento,
+                p.Titulo AS Puesto,
+                e.SalarioBase,
+                rn.TotalPrestaciones,
+                rn.TotalDeducciones,
+                rn.SalarioNeto,
+                pn.FechaInicio,
+                pn.FechaFin
+            FROM RegistrosNomina rn
+            INNER JOIN Empleados e ON rn.IdEmpleado = e.IdEmpleado
+            INNER JOIN PeriodosNomina pn ON rn.IdPeriodo = pn.IdPeriodo
+            LEFT JOIN Departamentos d ON e.IdDepartamento = d.IdDepartamento
+            LEFT JOIN Puestos p ON e.IdPuesto = p.IdPuesto
+        """
+
+        conditions = []
+        params = []
+
+        # El formulario puede enviar nombres o IDs. Normalizar a IDs enteros.
+        def resolve_id(table, id_col, name_col, value):
+            # si es vacío/None -> None
+            if not value:
+                return None
+            # si parece un entero, devolver como int
+            try:
+                return int(value)
+            except Exception:
+                pass
+            # intentar buscar por nombre en la tabla correspondiente
+            try:
+                lookup_sql = f"SELECT {id_col} FROM {table} WHERE {name_col} = ?"
+                cursor.execute(lookup_sql, (value,))
+                row = cursor.fetchone()
+                if row:
+                    return row[0]
+            except Exception:
+                # si algo falla, ignoramos y devolvemos None
+                pass
+            return None
+
+        departamento_id = resolve_id('Departamentos', 'IdDepartamento', 'Nombre', departamento)
+        cargo_id = resolve_id('Puestos', 'IdPuesto', 'Titulo', cargo)
+
+        if departamento_id is not None:
+            conditions.append("e.IdDepartamento = ?")
+            params.append(departamento_id)
+
+        if cargo_id is not None:
+            conditions.append("e.IdPuesto = ?")
+            params.append(cargo_id)
+
+        # Siempre filtrar por fechas (se usan valores por defecto si no se proporcionan)
+        conditions.append("pn.FechaInicio >= ?")
+        params.append(fecha_inicio)
+        conditions.append("pn.FechaFin <= ?")
+        params.append(fecha_fin)
+
+        if conditions:
+            base_sql += "\n WHERE " + " AND ".join(conditions)
+
+        base_sql += "\n ORDER BY e.Nombres;"
+
+        cursor.execute(base_sql, params)
+        data = cursor.fetchall()
+
+        if not data:
+            flash(" No se encontraron resultados para los filtros seleccionados.", "warning")
+            return render_template("Reportes/reportes.html", departamentos=departamentos, cargos=cargos, data=[])
+
+        # ======================
+        # Exportar a diferentes formatos
+        # ======================
+        if formato == "pdf":
+            buffer = io.BytesIO()
+            c = canvas.Canvas(buffer, pagesize=landscape(A4))
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(280, 560, "REPORTE DE NÓMINA")
+            c.setFont("Helvetica", 10)
+            # datetime imported as `datetime` from datetime, use datetime.now()
+            c.drawString(50, 530, f"Fecha de generación: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            c.line(50, 520, 800, 520)
+            y = 500
+            for row in data:
+                c.drawString(50, y, f"{row[0]} | {row[1]} | {row[2]} | Q{row[3]:,.2f} | Q{row[6]:,.2f}")
+                y -= 15
+                if y < 50:
+                    c.showPage()
+                    y = 550
+            c.save()
+            buffer.seek(0)
+            return send_file(buffer, as_attachment=True, download_name="Reporte_Nomina.pdf", mimetype="application/pdf")
+
+        elif formato == "excel":
+            # Prefer openpyxl Workbook if available, otherwise use pandas to produce an Excel file.
+            try:
+                if Workbook:
+                    wb = Workbook()
+                    ws = wb.active
+                    ws.title = "Reporte Nómina"
+                    ws.append(["Empleado", "Departamento", "Puesto", "Salario Base", "Prestaciones", "Deducciones", "Salario Neto", "Inicio", "Fin"])
+                    for row in data:
+                        ws.append(row)
+                    output = io.BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+                    return send_file(output, as_attachment=True, download_name="Reporte_Nomina.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                else:
+                    # Build a DataFrame and use pandas to_excel (requires an engine like openpyxl or xlsxwriter).
+                    cols = ["Empleado", "Departamento", "Puesto", "Salario Base", "Prestaciones", "Deducciones", "Salario Neto", "Inicio", "Fin"]
+                    df = pd.DataFrame(list(data), columns=cols)
+                    output = io.BytesIO()
+                    try:
+                        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                            df.to_excel(writer, index=False, sheet_name="Reporte")
+                        output.seek(0)
+                        return send_file(output, as_attachment=True, download_name="Reporte_Nomina.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    except Exception:
+                        # Fall back to CSV if Excel writing is not available
+                        output = io.StringIO()
+                        df.to_csv(output, index=False)
+                        output.seek(0)
+                        return send_file(io.BytesIO(output.getvalue().encode()), as_attachment=True, download_name="Reporte_Nomina.csv", mimetype="text/csv")
+            except Exception as e:
+                flash(f"No se pudo generar Excel: {e}", "danger")
+                # fall through to render page
+
+        elif formato == "csv":
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["Empleado", "Departamento", "Puesto", "Salario Base", "Prestaciones", "Deducciones", "Salario Neto", "Inicio", "Fin"])
+            writer.writerows(data)
+            output.seek(0)
+            return send_file(io.BytesIO(output.getvalue().encode()), as_attachment=True, download_name="Reporte_Nomina.csv", mimetype="text/csv")
+
+    cursor.close()
+    conn.close()
+    return render_template("Reportes/reportes.html", departamentos=departamentos, cargos=cargos, data=data)
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.getenv("PORT", 5000)), debug=True)

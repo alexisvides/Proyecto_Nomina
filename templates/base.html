@@ -50,14 +50,14 @@
       <div class="sidebar-section">
         <div class="sidebar-title">Operación</div>
         <a class="nav-link{% if request.endpoint in ['asistencia_listado','asistencia_nuevo'] %} active{% endif %}" href="{{ url_for('asistencia_listado') }}" aria-current="{% if request.endpoint in ['asistencia_listado','asistencia_nuevo'] %}page{% endif %}">Asistencia</a>
-  <a class="nav-link{% if request.endpoint == 'reportes' %} active{% endif %}" href="{{ url_for('reportes') }}" aria-current="{% if request.endpoint == 'reportes' %}page{% endif %}">Reportes</a>
-  <a class="nav-link{% if request.endpoint == 'comprobantes' %} active{% endif %}" href="{{ url_for('comprobantes') }}" aria-current="{% if request.endpoint == 'comprobantes' %}page{% endif %}">Comprobantes</a>
+  <a class="nav-link{% if request.endpoint == 'reportes_listado' %} active{% endif %}" href="{{ url_for('reportes_listado') }}" aria-current="{% if request.endpoint == 'reportes_listado' %}page{% endif %}">Reportes</a>
+  <a class="nav-link{% if request.endpoint == 'comprobantes_listado' %} active{% endif %}" href="{{ url_for('comprobantes_listado') }}" aria-current="{% if request.endpoint == 'comprobantes_listado' %}page{% endif %}">Comprobantes</a>
       </div>
       <div class="sidebar-section">
         <div class="sidebar-title">Seguridad</div>
         <a class="nav-link" href="#">Usuarios y Roles</a>
         <a class="nav-link" href="#">Auditoría</a>
-    <a class="nav-link{% if request.endpoint == 'seguridad' %} active{% endif %}" href="{{ url_for('seguridad') }}" aria-current="{% if request.endpoint == 'seguridad' %}page{% endif %}">Seguridad</a>
+  <a class="nav-link{% if request.endpoint == 'seguridad_listado' %} active{% endif %}" href="{{ url_for('seguridad_listado') }}" aria-current="{% if request.endpoint == 'seguridad_listado' %}page{% endif %}">Seguridad</a>
       </div>
     </aside>
     {% endif %}
