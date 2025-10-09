@@ -1,0 +1,13 @@
+# Entornos virtuales (Python/Flask)
+.venv/
+venv/
+env/
+ENV/
+.virtualenv/
+.pyenv/
+.python-version  # si usas pyenv
+
+# Cachés de Python (recomendado)
+__pycache__/
+*.py[cod]
+*$py.class
