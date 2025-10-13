@@ -840,16 +840,10 @@ def empleados_listado():
 @app.route("/empleados/nuevo", methods=["GET", "POST"])
 def empleados_nuevo():
     if request.method == "POST":
-        codigo = (request.form.get("codigo") or "").strip()
-        nombres = (request.form.get("nombres") or "").strip()
-        apellidos = (request.form.get("apellidos") or "").strip()
-        fecha_inicio = (request.form.get("fecha_inicio") or "").strip()
-        fecha_fin = (request.form.get("fecha_fin") or "").strip() or None
-        salario = (request.form.get("salario") or "").strip()
-        dpi = (request.form.get("dpi") or "").strip()
-        igss = (request.form.get("igss") or "").strip() or None
-        correo = (request.form.get("correo") or "").strip() or None
-        fecha_nac = (request.form.get("fecha_nacimiento") or "").strip() or None
+        #codigo = (request.form.get("codigo") or "").strip()
+        nombres = (request.form.get("nombre") or "").strip()
+        apellidos = (request.form.get("descripcion") or "").strip()
+  
 
         if not codigo:
             codigo = f"EMP-{int(datetime.now().timestamp())}"
@@ -1435,95 +1429,68 @@ def departamentos_listado():
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT IdEmpleado, CodigoEmpleado, Nombres, Apellidos, 
-                           CONVERT(varchar(10), FechaContratacion, 23) as FechaInicio,
-                           CONVERT(varchar(10), FechaFin, 23) as FechaFin,
-                           SalarioBase, DocumentoIdentidad, NumeroIGSS,
-                           CONVERT(varchar(10), FechaNacimiento, 23) as FechaNacimiento
-                    FROM Empleados
-                    ORDER BY Apellidos, Nombres
+                    SELECT IdDepartamento, nombre, descripcion 
+                    FROM Departamentos
                     """
                 )
-                empleados = cur.fetchall()
-        return render_template("departamentos/list.html", empleados=empleados)
+                departamentos = cur.fetchall()
+        return render_template("departamentos/list.html", departamentos=departamentos)
     except Exception as e:
-        flash(f"Error cargando empleados: {e}", "danger")
-        return render_template("departamentos/list.html", empleados=[])
+        flash(f"Error cargando departamentos: {e}", "danger")
+        return render_template("departamentos/list.html", departamentos=[])
     
 @app.route("/departamentos/nuevo", methods=["GET", "POST"])
 def departamento_nuevo():
     if request.method == "POST":
-        codigo = (request.form.get("codigo") or "").strip()
-        nombres = (request.form.get("nombres") or "").strip()
-        apellidos = (request.form.get("apellidos") or "").strip()
-        fecha_inicio = (request.form.get("fecha_inicio") or "").strip()
-        fecha_fin = (request.form.get("fecha_fin") or "").strip() or None
-        salario = (request.form.get("salario") or "").strip()
-        dpi = (request.form.get("dpi") or "").strip()
-        igss = (request.form.get("igss") or "").strip() or None
-        correo = (request.form.get("correo") or "").strip() or None
-        fecha_nac = (request.form.get("fecha_nacimiento") or "").strip() or None
+        #codigo = (request.form.get("codigo") or "").strip()
+        nombre = (request.form.get("nombre") or "").strip()
+        descripcion = (request.form.get("descripcion") or "").strip()
 
-        if not codigo:
-            codigo = f"EMP-{int(datetime.now().timestamp())}"
-        if not (nombres and apellidos and fecha_inicio and salario and dpi):
-            flash("Nombres, Apellidos, Fecha de inicio, Salario y DPI son obligatorios.", "warning")
-            return render_template("empleados/new.html")
-        try:
-            salario_num = float(salario)
-            if salario_num < 0:
-                raise ValueError
-        except Exception:
-            flash("Salario inválido.", "warning")
-            return render_template("empleados/new.html")
-
+     
+        if not (nombre and descripcion):
+            flash("Nombre del departamento y descripcoin son obligatorios.", "warning")
+            return render_template("departamentos/new.html")
         try:
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     # Unicidad básicas
-                    cur.execute("SELECT COUNT(1) FROM Empleados WHERE CodigoEmpleado = ?", (codigo,))
-                    if cur.fetchone()[0]:
-                        flash("El código de empleado ya existe.", "warning")
-                        return render_template("empleados/new.html")
-                    cur.execute("SELECT COUNT(1) FROM Empleados WHERE DocumentoIdentidad = ?", (dpi,))
-                    if cur.fetchone()[0]:
-                        flash("El DPI ya existe en otro empleado.", "warning")
-                        return render_template("empleados/new.html")
-                    if igss:
-                        cur.execute("SELECT COUNT(1) FROM Empleados WHERE NumeroIGSS = ?", (igss,))
-                        if cur.fetchone()[0]:
-                            flash("El Número IGSS ya existe en otro empleado.", "warning")
-                            return render_template("empleados/new.html")
-                    if correo:
-                        cur.execute("SELECT COUNT(1) FROM Empleados WHERE Correo = ?", (correo,))
-                        if cur.fetchone()[0]:
-                            flash("El correo ya existe en otro empleado.", "warning")
-                            return render_template("empleados/new.html")
 
-                    fi = fecha_inicio if fecha_inicio else None
-                    ff = fecha_fin if fecha_fin else None
-                    fn = fecha_nac if fecha_nac else None
+                    cur.execute("SELECT COUNT(1) FROM Departamentos WHERE nombre = ?", (nombre,))
+                    if cur.fetchone()[0]:
+                        flash("El nombre del departamento ya existe.", "warning")
+                        return render_template("empleados/new.html")
+                    
                     cur.execute(
                         """
-                        INSERT INTO Empleados (
-                            CodigoEmpleado, Nombres, Apellidos, DocumentoIdentidad,
-                            FechaContratacion, FechaFin, SalarioBase, NumeroIGSS, FechaNacimiento,
-                            Correo
-                        ) VALUES (?,?,?,?,?,?,?,?,?,?)
+                        INSERT INTO Departamentos (
+                        nombre, descripcion
+                        ) VALUES (?,?)
                         """,
                         (
-                            codigo, nombres, apellidos, dpi,
-                            fi, ff, salario_num, igss, fn, correo
+                        nombre, descripcion
                         ),
                     )
                     conn.commit()
-            flash("Empleado creado.", "success")
+            flash("Departamento creado.", "success")
             return redirect(url_for("departamentos_listado"))
         except Exception as e:
-            flash(f"No se pudo crear el empleado: {e}", "danger")
+            flash(f"No se pudo crear el departamento leado: {e}", "danger")
             return render_template("departamentos/new.html")
 
     return render_template("departamentos/new.html")
+
+@app.route("/departamentos/<int:IdDepartamento>/eliminar", methods=["POST"])
+def departamentos_eliminar(IdDepartamento: int):
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM Departamentos WHERE IdDepartamento = ?", (IdDepartamento,))
+            conn.commit()
+        flash("Empleado eliminado.", "success")
+    except Exception as e:
+        flash(f"No se pudo eliminar el empleado: {e}", "danger")
+    return redirect(url_for("empleados_listado"))
+
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.getenv("PORT", 5000)), debug=True)
