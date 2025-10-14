@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}Editar Departamento{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card" style="max-width:720px; margin:auto;">
+    <h2 class="card-title">Editar Departamento</h2>
+    <form method="POST" action="{{ url_for('departamento_editar', IdDepartamento=item[0]) }}" style="display:grid; gap:12px;">
+      <div>
+        <label>Nombre</label>
+        <input type="text" name="nombre" value="{{ item[1] }}" required style="width:100%; padding:8px;">
+      </div>
+      <div>
+        <label>Descripción</label>
+        <input type="text" name="descripcion" value="{{ item[2] }}" required style="width:100%; padding:8px;">
+      </div>
+
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <a class="btn btn-outline" href="{{ url_for('departamentos_listado') }}">Cancelar</a>
+        <button class="btn btn-primary" type="submit">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -1491,6 +1491,109 @@ def departamentos_eliminar(IdDepartamento: int):
         flash(f"No se pudo eliminar el empleado: {e}", "danger")
     return redirect(url_for("empleados_listado"))
 
+@app.route("/departamentos/buscar", methods=["GET"])
+def departamentos_lista():
+    # filtro por querystring ?q=...
+    q = (request.args.get("q") or "").strip()
+
+    sql = """
+        SELECT IdDepartamento, Nombre, Descripcion
+        FROM Departamentos
+    """
+    params = []
+    if q:
+        sql += """
+            WHERE (Nombre LIKE ? OR Descripcion LIKE ? OR CAST(IdDepartamento AS VARCHAR(20)) LIKE ?)
+        """
+        like = f"%{q}%"
+        params = [like, like, like]
+
+    sql += " ORDER BY Nombre"
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                departamentos = cur.fetchall()
+        # pasa 'q' para mantener el valor en el input
+        return render_template("departamentos/list.html", departamentos=departamentos, q=q)
+    except Exception as e:
+        flash(f"Error cargando departamentos: {e}", "danger")
+        return render_template("departamentos/list.html", departamentos=[], q=q)
+
+@app.route("/departamentos/<int:IdDepartamento>/editar", methods=["GET", "POST"])
+def departamento_editar(IdDepartamento: int):
+    if request.method == "POST":
+        nombre = (request.form.get("nombre") or "").strip()
+        descripcion = (request.form.get("descripcion") or "").strip()
+
+        if not (nombre and descripcion):
+            flash("Nombre y descripción son obligatorios.", "warning")
+            # Volvemos a cargar el registro para re-renderizar el form con error
+            try:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT IdDepartamento, Nombre, Descripcion FROM Departamentos WHERE IdDepartamento = ?",
+                            (IdDepartamento,),
+                        )
+                        row = cur.fetchone()
+                if not row:
+                    flash("Departamento no encontrado.", "warning")
+                    return redirect(url_for("departamentos_listado"))
+                return render_template("departamentos/edit.html", item=row)
+            except Exception as e:
+                flash(f"Error cargando departamento: {e}", "danger")
+                return redirect(url_for("departamentos_listado"))
+
+        # Validar unicidad (mismo nombre en otro ID)
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT COUNT(1) FROM Departamentos WHERE Nombre = ? AND IdDepartamento <> ?",
+                        (nombre, IdDepartamento),
+                    )
+                    if cur.fetchone()[0]:
+                        flash("Ya existe otro departamento con ese nombre.", "warning")
+                        # Recargar form con valores ingresados
+                        item = (IdDepartamento, nombre, descripcion)
+                        return render_template("departamentos/edit.html", item=item)
+
+                    # Actualizar
+                    cur.execute(
+                        """
+                        UPDATE Departamentos
+                           SET Nombre = ?, Descripcion = ?
+                         WHERE IdDepartamento = ?
+                        """,
+                        (nombre, descripcion, IdDepartamento),
+                    )
+                    conn.commit()
+            flash("Departamento actualizado.", "success")
+            return redirect(url_for("departamentos_listado"))
+        except Exception as e:
+            flash(f"No se pudo actualizar el departamento: {e}", "danger")
+            item = (IdDepartamento, nombre, descripcion)
+            return render_template("departamentos/edit.html", item=item)
+
+    # GET: cargar registro
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT IdDepartamento, Nombre, Descripcion FROM Departamentos WHERE IdDepartamento = ?",
+                    (IdDepartamento,),
+                )
+                row = cur.fetchone()
+        if not row:
+            flash("Departamento no encontrado.", "warning")
+            return redirect(url_for("departamentos_listado"))
+        return render_template("departamentos/edit.html", item=row)
+    except Exception as e:
+        flash(f"Error cargando departamento: {e}", "danger")
+        return redirect(url_for("departamentos_listado"))
+
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.getenv("PORT", 5000)), debug=True)

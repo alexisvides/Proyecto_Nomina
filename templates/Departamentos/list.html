@@ -7,6 +7,23 @@
     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
       <h2 class="card-title" style="margin:0;">Departamentos</h2>
       <div style="display:flex; gap:8px; align-items:center;">
+        <div style="display: flex;align-items: center;justify-content: space-between;">
+          <form method="GET" action="{{ url_for('departamentos_lista') }}" style="display:flex; gap:6px; align-items:center;">
+            <button class="btn btn-outline" type="submit">Buscar</button>
+            {% if request.args.get('q') %}
+              <a class="btn btn-outline" href="{{ url_for('departamentos_lista') }}">Limpiar</a>
+            {% endif %}
+            <input
+              type="search"
+              name="q"
+              value="{{ request.args.get('q','') }}"
+              placeholder="Buscar (código, nombre, descripción)"
+              style="padding:8px 10px; min-width:240px; border:1px solid #1f2a44; border-radius:6px;"
+              aria-label="Buscar departamento"
+            />
+            
+          </form>
+        </div>
         <div id="toolbarEmp" style="display:flex; gap:6px; align-items:center;">
           <button id="btnEmpEliminar" class="btn btn-outline" type="button" disabled>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
@@ -32,6 +49,7 @@
             <th style="padding:10px 8px;">Codigo</th>
             <th style="padding:10px 8px;">Nombre</th>
             <th style="padding:10px 8px;">Descripción</th>
+            <th style="padding:10px 8px;">Acciones</th>
             <th style="padding:10px 8px;">&nbsp;</th>
           </tr>
         </thead>
@@ -43,6 +61,11 @@
                 <td style="padding:10px 8px;">{{ e[0] }}</td>
                 <td style="padding:10px 8px;">{{ e[1] }}</td>
                 <td style="padding:10px 8px;">{{ e[2] }}</td>
+                <td style="padding:10px 8px;">
+                  <a class="btn btn-outline" href="{{ url_for('departamento_editar', IdDepartamento=e[0]) }}">
+                  Editar
+                  </a>
+                </td>
                 <td style="padding:10px 8px;">&nbsp;</td>
               </tr>
             {% endfor %}
@@ -91,6 +114,40 @@
         postEach("{{ url_for('departamentos_eliminar', IdDepartamento=0) }}", ids, '¿Eliminar los departamentos seleccionados? Esta acción no se puede deshacer.');
       });
     }
+
+        // ...tu código existente...
+
+    // --- Filtro local por texto (en todas las celdas visibles) ---
+    const filtro = document.getElementById('filtroLocal');
+    const filas  = Array.from(document.querySelectorAll('tbody tr'));
+
+    function coincide(fila, q){
+      if(!q) return true;
+      const txt = fila.innerText.toLowerCase();
+      return txt.includes(q.toLowerCase());
+    }
+
+    function aplicarFiltro(){
+      const q = filtro.value.trim();
+      let visibles = 0;
+      filas.forEach(tr => {
+        const ok = coincide(tr, q);
+        tr.style.display = ok ? '' : 'none';
+        if (ok) visibles++;
+      });
+      // Si quieres, aquí puedes mostrar un mensaje cuando no hay coincidencias
+      // Ej.: document.getElementById('sinResultados').hidden = (visibles !== 0);
+    }
+
+    if(filtro){
+      // Debounce simple
+      let t = null;
+      filtro.addEventListener('input', ()=>{
+        clearTimeout(t);
+        t = setTimeout(aplicarFiltro, 150);
+      });
+    }
+
   })();
 </script>
 {% endblock %}
