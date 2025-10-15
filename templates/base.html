@@ -44,7 +44,9 @@
       <div class="sidebar-section">
         <div class="sidebar-title">Catálogos</div>
         <a class="nav-link{% if request.endpoint in ['empleados_listado','empleados_nuevo'] %} active{% endif %}" href="{{ url_for('empleados_listado') }}" aria-current="{% if request.endpoint in ['empleados_listado','empleados_nuevo'] %}page{% endif %}">Empleados</a>
-        <a class="nav-link{% if request.endpoint in ['departamentos_listado','departamentos_nuevo'] %} active{% endif %}" href="{{ url_for('departamentos_listado') }}" aria-current="{% if request.endpoint in ['departamentos_listado','departamentos_nuevo'] %}page{% endif %}">Departamentos y Puestos</a>
+        <a class="nav-link{% if request.endpoint in ['departamentos_listado','departamentos_nuevo'] %} active{% endif %}" href="{{ url_for('departamentos_listado') }}" aria-current="{% if request.endpoint in ['departamentos_listado','departamentos_nuevo'] %}page{% endif %}">Departamentos</a>
+        <a class="nav-link{% if request.endpoint in ['puestos_listado','puestos_nuevo'] %} active{% endif %}" href="{{ url_for('puestos_listado') }}" aria-current="{% if request.endpoint in ['puestos_listado','puestos_nuevo'] %}page{% endif %}">Puestos</a>
+
         <a class="nav-link{% if request.endpoint in ['beneficios_listado','beneficios_nuevo'] %} active{% endif %}" href="{{ url_for('beneficios_listado') }}" aria-current="{% if request.endpoint in ['beneficios_listado','beneficios_nuevo'] %}page{% endif %}">Deducciones y Prestaciones</a>
       </div>
       <div class="sidebar-section">
