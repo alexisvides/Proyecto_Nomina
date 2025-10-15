@@ -1,6 +1,99 @@
-{% extends 'base.html' %}
-{% block title %}Seguridad{% endblock %}
+{% extends "base.html" %}
+{% block title %}Seguridad y Roles{% endblock %}
 {% block content %}
-<h1>Seguridad</h1>
-<p>Bienvenido al módulo de seguridad.</p>
+<div class="container mt-5 mb-5">
+  <div class="card shadow-lg border-0 rounded-4">
+    <div class="card-header bg-primary text-white rounded-top-4 py-3">
+      <h4 class="mb-0"><i class="bi bi-shield-lock-fill me-2"></i>Gestión de Seguridad y Roles</h4>
+    </div>
+
+    <div class="card-body p-4">
+
+      <!-- Flash messages -->
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <!-- Formulario -->
+      <form method="POST" class="mb-4">
+        <div class="row g-4 align-items-end">
+          <div class="col-md-5">
+            <label class="form-label fw-semibold fs-6">Usuario</label>
+            <select name="usuario" class="form-select form-select-lg shadow-sm">
+              <option value="">-- Seleccionar Usuario --</option>
+              {% for u in usuarios %}
+              <option value="{{ u[0] }}">{{ u[1] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label fw-semibold fs-6">Rol</label>
+            <select name="rol" class="form-select form-select-lg shadow-sm">
+              <option value="">-- Seleccionar Rol --</option>
+              {% for r in roles %}
+              <option value="{{ r[0] }}">{{ r[1] }} - {{ r[2] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 text-center">
+            <button type="submit" name="accion" value="asignar" class="btn btn-success btn-lg w-100 mb-2">
+              <i class="bi bi-person-plus-fill me-1"></i> Asignar
+            </button>
+            <button type="submit" name="accion" value="eliminar" class="btn btn-danger btn-lg w-100">
+              <i class="bi bi-person-dash-fill me-1"></i> Quitar
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- Tabla de Asignaciones -->
+      <div class="table-responsive mt-5">
+        <table class="table table-hover align-middle shadow-sm">
+          <thead class="table-primary text-center">
+            <tr>
+              <th>Usuario</th>
+              <th>Rol</th>
+              <th>Descripción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in asignaciones %}
+            <tr>
+              <td>{{ a[1] }}</td>
+              <td>{{ a[3] }}</td>
+              <td>{{ a[4] }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .card-header {
+    background: linear-gradient(135deg, var(--bs-primary), #4a7dfc);
+  }
+  .btn-lg {
+    font-size: 1.05rem;
+    border-radius: 0.75rem;
+  }
+  .form-select-lg {
+    height: calc(3.2rem + 2px);
+    font-size: 1.1rem;
+    border-radius: 0.75rem;
+  }
+  .btn:hover {
+    transform: scale(1.03);
+    transition: 0.2s ease;
+  }
+</style>
 {% endblock %}
