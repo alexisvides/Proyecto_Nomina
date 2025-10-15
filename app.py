@@ -1422,6 +1422,9 @@ def reportes_listado():
     conn.close()
     return render_template("Reportes/reportes.html", departamentos=departamentos, cargos=cargos, data=data)
 
+# ============================================================
+# 🔹 MÓDULO DE DEPARTAMENTOS
+# ============================================================
 @app.route("/departamentos")
 def departamentos_listado():
     try:
@@ -1593,7 +1596,67 @@ def departamento_editar(IdDepartamento: int):
     except Exception as e:
         flash(f"Error cargando departamento: {e}", "danger")
         return redirect(url_for("departamentos_listado"))
+# ============================================================
 
+# ============================================================
+# 🔹 MÓDULO DE PUESTOS
+# ============================================================
+@app.route("/puestos")
+def puestos_listado():
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT IdPuesto,IdDepartamento, titulo, descripcion 
+                    FROM puestos
+                    """
+                )
+                puestos = cur.fetchall()
+        return render_template("puestos/list.html", puestos=puestos)
+    except Exception as e:
+        flash(f"Error cargando puestos: {e}", "danger")
+        return render_template("puestos/list.html", puestos=[])
 
+@app.route("/puestos/nuevo", methods=["GET", "POST"])
+def puesto_nuevo():
+    if request.method == "POST":
+        #codigo = (request.form.get("codigo") or "").strip()
+        nombre = (request.form.get("nombre") or "").strip()
+        descripcion = (request.form.get("descripcion") or "").strip()
+
+     
+        if not (nombre and descripcion):
+            flash("Nombre del puesto y descripcoin son obligatorios.", "warning")
+            return render_template("departamentos/new.html")
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Unicidad básicas
+
+                    cur.execute("SELECT COUNT(1) FROM Departamentos WHERE nombre = ?", (nombre,))
+                    if cur.fetchone()[0]:
+                        flash("El nombre del departamento ya existe.", "warning")
+                        return render_template("empleados/new.html")
+                    
+                    cur.execute(
+                        """
+                        INSERT INTO Departamentos (
+                        nombre, descripcion
+                        ) VALUES (?,?)
+                        """,
+                        (
+                        nombre, descripcion
+                        ),
+                    )
+                    conn.commit()
+            flash("Departamento creado.", "success")
+            return redirect(url_for("puesto_listado"))
+        except Exception as e:
+            flash(f"No se pudo crear el puesto: {e}", "danger")
+            return render_template("puestos/new.html")
+
+    return render_template("puestos/new.html")
+    
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=int(os.getenv("PORT", 5000)), debug=True)
