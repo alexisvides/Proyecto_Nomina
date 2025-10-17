@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% block title %}Comprobantes{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+      <h2 class="card-title" style="margin:0;">Comprobantes de Pago</h2>
+    </div>
+    <p class="card-subtitle">Consulta y descarga comprobantes de pago por empleado y periodo.</p>
+
+    <div style="margin-top:24px;">
+      <form class="form" method="get" style="max-width:720px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          <div class="form-group">
+            <label for="empleado">Empleado</label>
+            <select id="empleado" name="empleado" style="padding:12px 14px; border-radius:10px; background:#0b1328; color:var(--text); border:1px solid #1f2a44;">
+              <option value="">Todos los empleados</option>
+              {% for emp in empleados %}
+                <option value="{{ emp[0] }}" {% if filtro_empleado and filtro_empleado == emp[0]|string %}selected{% endif %}>
+                  {{ emp[1] }} {{ emp[2] }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="periodo">Periodo</label>
+            <select id="periodo" name="periodo" style="padding:12px 14px; border-radius:10px; background:#0b1328; color:var(--text); border:1px solid #1f2a44;">
+              <option value="">Todos los periodos</option>
+              {% for per in periodos %}
+                <option value="{{ per[0] }}" {% if filtro_periodo and filtro_periodo == per[0]|string %}selected{% endif %}>
+                  {{ per[1] }} - {{ per[2] }} ({{ per[3] }})
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;">
+          <button class="btn btn-primary" type="submit">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            Buscar
+          </button>
+          {% if filtro_empleado or filtro_periodo %}
+          <a href="{{ url_for('comprobantes_listado') }}" class="btn btn-outline">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            Limpiar Filtros
+          </a>
+          {% endif %}
+        </div>
+      </form>
+
+      <div style="margin-top:32px;">
+        <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:600;">Resultados ({{ comprobantes|length }})</h3>
+        
+        {% if comprobantes %}
+        <div style="overflow:auto;">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr style="text-align:left; border-bottom:1px solid #1f2a44; color:var(--muted);">
+                <th style="padding:10px 8px;">Empleado</th>
+                <th style="padding:10px 8px;">Periodo</th>
+                <th style="padding:10px 8px;">Tipo</th>
+                <th style="padding:10px 8px;">Salario Neto</th>
+                <th style="padding:10px 8px;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for comp in comprobantes %}
+              <tr style="border-bottom:1px solid #1f2a44;">
+                <td style="padding:10px 8px;">{{ comp[2] }} {{ comp[3] }}</td>
+                <td style="padding:10px 8px;">{{ comp[5] }} - {{ comp[6] }}</td>
+                <td style="padding:10px 8px; text-transform:capitalize;">{{ comp[7] }}</td>
+                <td style="padding:10px 8px;">Q {{ '%.2f'|format(comp[8]) }}</td>
+                <td style="padding:10px 8px;">
+                  <a href="{{ url_for('comprobante_pdf', id_nomina=comp[0]) }}" class="btn btn-outline" style="padding:8px 12px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Descargar PDF
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p style="color:var(--muted);">
+          {% if filtro_empleado or filtro_periodo %}
+            No se encontraron comprobantes con los filtros seleccionados.
+          {% else %}
+            Selecciona filtros y presiona "Buscar" para ver comprobantes disponibles.
+          {% endif %}
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

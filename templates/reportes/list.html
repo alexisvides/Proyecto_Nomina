@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Reportes{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+      <h2 class="card-title" style="margin:0;">Reportes</h2>
+    </div>
+    <p class="card-subtitle">Genera reportes de nómina, asistencia y empleados.</p>
+
+    <div style="margin-top:24px; display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+      <!-- Reporte de Nómina por Periodo -->
+      <div class="card" style="padding:20px;">
+        <h3 style="margin:0 0 8px 0; font-size:18px; font-weight:600;">Nómina por Periodo</h3>
+        <p class="card-subtitle" style="margin-bottom:16px;">Exporta el detalle de nómina de un periodo específico.</p>
+        <form method="get" action="{{ url_for('periodos_listado') }}">
+          <button class="btn btn-primary" type="submit" style="width:100%;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M16 3v4a1 1 0 0 0 1 1h4"/>
+            </svg>
+            Ver Periodos
+          </button>
+        </form>
+      </div>
+
+      <!-- Reporte de Asistencia -->
+      <div class="card" style="padding:20px;">
+        <h3 style="margin:0 0 8px 0; font-size:18px; font-weight:600;">Asistencia</h3>
+        <p class="card-subtitle" style="margin-bottom:16px;">Consulta registros de asistencia por rango de fechas.</p>
+        <form method="get" action="{{ url_for('asistencia_listado') }}">
+          <button class="btn btn-primary" type="submit" style="width:100%;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Ver Asistencia
+          </button>
+        </form>
+      </div>
+
+      <!-- Reporte de Empleados -->
+      <div class="card" style="padding:20px;">
+        <h3 style="margin:0 0 8px 0; font-size:18px; font-weight:600;">Empleados</h3>
+        <p class="card-subtitle" style="margin-bottom:16px;">Lista completa de empleados activos e inactivos.</p>
+        <form method="get" action="{{ url_for('empleados_listado') }}">
+          <button class="btn btn-primary" type="submit" style="width:100%;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            Ver Empleados
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

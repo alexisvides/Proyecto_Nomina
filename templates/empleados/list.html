@@ -8,6 +8,12 @@
       <h2 class="card-title" style="margin:0;">Empleados</h2>
       <div style="display:flex; gap:8px; align-items:center;">
         <div id="toolbarEmp" style="display:flex; gap:6px; align-items:center;">
+          <button id="btnEmpEditar" class="btn btn-outline" type="button" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Editar
+          </button>
           <button id="btnEmpBenef" class="btn btn-outline" type="button" disabled>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/>
@@ -80,6 +86,7 @@
   (function(){
     const selAll = document.getElementById('selEmpAll');
     const rows = Array.from(document.querySelectorAll('.empRowSel'));
+    const btnEditar = document.getElementById('btnEmpEditar');
     const btnBenef = document.getElementById('btnEmpBenef');
     const btnEliminar = document.getElementById('btnEmpEliminar');
 
@@ -88,6 +95,7 @@
       const ids = selectedIds();
       const one = ids.length === 1;
       const any = ids.length > 0;
+      if(btnEditar) btnEditar.disabled = !one;
       if(btnBenef) btnBenef.disabled = !one;
       if(btnEliminar) btnEliminar.disabled = !any;
       if(selAll){ selAll.checked = ids.length === rows.length && rows.length>0; }
@@ -95,6 +103,14 @@
     if(selAll){ selAll.addEventListener('change', ()=>{ rows.forEach(r=>r.checked = selAll.checked); updateToolbar(); }); }
     rows.forEach(r=> r.addEventListener('change', updateToolbar));
     updateToolbar();
+
+    if(btnEditar){
+      btnEditar.addEventListener('click', ()=>{
+        const ids = selectedIds(); if(ids.length!==1) return;
+        const url = "{{ url_for('empleados_editar', id_empleado=0) }}".replace('0', ids[0]);
+        window.location = url;
+      });
+    }
 
     if(btnBenef){
       btnBenef.addEventListener('click', ()=>{

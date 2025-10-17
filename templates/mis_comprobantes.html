@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% block title %}Mis Comprobantes{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem;">
+      <div>
+        <h2 class="card-title" style="margin:0;">Mis Comprobantes de Nómina</h2>
+        {% if nombre_empleado %}
+          <p class="card-subtitle" style="margin-top:0.5rem;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:6px; color:#6366f1;">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            {{ nombre_empleado }}
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if not id_empleado %}
+      <div style="text-align:center; padding:3rem 1rem;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#ef4444; margin-bottom:1rem;">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <h3 style="color:#e2e8f0; margin-bottom:0.5rem;">No hay empleado asociado</h3>
+        <p style="color:#94a3b8;">Tu usuario no está vinculado a un empleado. Contacta al administrador para asociar tu cuenta.</p>
+      </div>
+    {% elif comprobantes|length == 0 %}
+      <div style="text-align:center; padding:3rem 1rem;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#94a3b8; margin-bottom:1rem;">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <h3 style="color:#e2e8f0; margin-bottom:0.5rem;">Sin comprobantes</h3>
+        <p style="color:#94a3b8;">Aún no tienes comprobantes de nómina registrados.</p>
+      </div>
+    {% else %}
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:40%;">Periodo</th>
+              <th style="text-align:center;">Días Laborados</th>
+              <th style="text-align:right;">Salario Bruto</th>
+              <th style="text-align:right;">Deducciones</th>
+              <th style="text-align:right;">Salario Neto</th>
+              <th style="text-align:center;">Estado</th>
+              <th style="text-align:center; width:80px;">Detalle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for comp in comprobantes %}
+            <tr>
+              <td>
+                <div style="font-weight:600; color:#e2e8f0;">{{ comp.Periodo }}</div>
+              </td>
+              <td style="text-align:center;">
+                <span style="padding:4px 12px; background:rgba(99, 102, 241, 0.1); color:#818cf8; border-radius:6px; font-weight:600;">
+                  {{ comp.DiasLaborados }} días
+                </span>
+              </td>
+              <td style="text-align:right; font-weight:600; color:#10b981;">
+                Q {{ "{:,.2f}".format(comp.SalarioBruto) }}
+              </td>
+              <td style="text-align:right; font-weight:600; color:#ef4444;">
+                Q {{ "{:,.2f}".format(comp.TotalDeducciones) }}
+              </td>
+              <td style="text-align:right; font-weight:700; color:#6366f1; font-size:1.05rem;">
+                Q {{ "{:,.2f}".format(comp.SalarioNeto) }}
+              </td>
+              <td style="text-align:center;">
+                {% if comp.Estado == 'Cerrado' %}
+                  <span style="padding:4px 12px; background:rgba(16, 185, 129, 0.15); color:#10b981; border:1px solid rgba(16, 185, 129, 0.3); border-radius:6px; font-size:0.8125rem; font-weight:600;">
+                    Cerrado
+                  </span>
+                {% elif comp.Estado == 'Borrador' %}
+                  <span style="padding:4px 12px; background:rgba(251, 191, 36, 0.15); color:#fbbf24; border:1px solid rgba(251, 191, 36, 0.3); border-radius:6px; font-size:0.8125rem; font-weight:600;">
+                    Borrador
+                  </span>
+                {% else %}
+                  <span style="padding:4px 12px; background:rgba(99, 102, 241, 0.15); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.3); border-radius:6px; font-size:0.8125rem; font-weight:600;">
+                    {{ comp.Estado }}
+                  </span>
+                {% endif %}
+              </td>
+              <td style="text-align:center;">
+                <a href="{{ url_for('mi_comprobante_detalle', id_registro=comp.IdRegistroNomina) }}" 
+                   class="btn btn-outline" 
+                   style="padding:6px 12px; font-size:0.875rem;"
+                   title="Ver detalle">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:1.5rem; padding-top:1rem; border-top:1px solid #1f2a44;">
+        <p style="color:#94a3b8; font-size:0.875rem; margin:0;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:6px;">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          Total de comprobantes: <strong style="color:#e2e8f0;">{{ comprobantes|length }}</strong>
+        </p>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<style>
+  .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid #1f2a44;
+    border-radius: 12px;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .data-table thead {
+    background: #0f1a2e;
+  }
+
+  .data-table th {
+    padding: 14px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #94a3b8;
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #1f2a44;
+  }
+
+  .data-table tbody tr {
+    border-bottom: 1px solid #1f2a44;
+    transition: background 0.2s;
+  }
+
+  .data-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.05);
+  }
+
+  .data-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .data-table td {
+    padding: 14px 12px;
+    color: #e2e8f0;
+    font-size: 0.9375rem;
+  }
+
+  @media (max-width: 768px) {
+    .table-wrapper {
+      border-radius: 8px;
+    }
+    
+    .data-table th,
+    .data-table td {
+      padding: 10px 8px;
+      font-size: 0.875rem;
+    }
+  }
+</style>
+{% endblock %}

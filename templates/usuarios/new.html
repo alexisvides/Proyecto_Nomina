@@ -1,0 +1,224 @@
+{% extends 'base.html' %}
+{% block title %}Nuevo Usuario{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card auth-card" style="max-width:640px;">
+    <h2 class="card-title">Nuevo Usuario</h2>
+    <p class="card-subtitle">Completa los campos para crear un usuario</p>
+
+    <form class="form" method="post">
+      <div class="form-group">
+        <label for="nombre_usuario">Nombre de Usuario</label>
+        <input id="nombre_usuario" name="nombre_usuario" type="text" placeholder="Ej. jperez" required />
+      </div>
+
+      <div class="form-group">
+        <label for="correo">Correo Electrónico</label>
+        <input id="correo" name="correo" type="email" placeholder="usuario@empresa.com" required />
+      </div>
+
+      <div class="form-group">
+        <label for="clave">Contraseña</label>
+        <input id="clave" name="clave" type="password" placeholder="Contraseña" required />
+        <small class="card-subtitle">La contraseña debe tener al menos 8 caracteres, incluyendo mayúsculas, minúsculas y números.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="id_empleado">Empleado Asociado (Opcional)</label>
+        <select id="id_empleado" name="id_empleado" style="padding:12px 14px; border-radius:10px; background:#0b1328; color:var(--text); border:1px solid #1f2a44; width:100%;">
+          <option value="">-- Ninguno (Usuario sin empleado) --</option>
+          {% for emp in empleados %}
+            <option value="{{ emp.IdEmpleado }}">
+              {{ emp.Nombres }} {{ emp.Apellidos }}
+              {% if emp.Puesto %} - {{ emp.Puesto }}{% endif %}
+              {% if emp.Departamento %} ({{ emp.Departamento }}){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <small class="card-subtitle">Selecciona el empleado que usará este usuario. Solo se muestran empleados sin usuario asignado.</small>
+      </div>
+
+      <div class="form-group">
+        <label>Rol de Usuario</label>
+        <div class="roles-grid">
+          {% for rol in roles %}
+          <div class="role-card">
+            <input type="radio" id="rol_{{ rol.IdRol }}" name="id_rol" value="{{ rol.IdRol }}" 
+                   {% if loop.first %}checked{% endif %} class="role-radio" />
+            <label for="rol_{{ rol.IdRol }}" class="role-label">
+              <div class="role-icon">
+                {% if rol.Nombre == 'Administrador' %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5.52 19c.64-2.2 1.84-3 3.22-3h6.52c1.38 0 2.58.8 3.22 3"/>
+                  <circle cx="12" cy="10" r="3"/>
+                  <circle cx="12" cy="12" r="10"/>
+                </svg>
+                {% elif rol.Nombre == 'Gerente' %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                {% elif rol.Nombre == 'Supervisor' %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                {% else %}
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                {% endif %}
+              </div>
+              <span class="role-title">{{ rol.Nombre }}</span>
+              <span class="role-desc">{{ rol.Descripcion }}</span>
+              <div class="role-permissions">
+                {% set permisos = obtener_permisos_rol(rol.IdRol) %}
+                {% for permiso in permisos[:3] %}
+                  <span class="permission-badge">{{ permiso.Modulo }}</span>
+                {% endfor %}
+                {% if permisos|length > 3 %}
+                  <span class="permission-more">+{{ permisos|length - 3 }} más</span>
+                {% endif %}
+              </div>
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <path d="M19 21H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          Crear Usuario
+        </button>
+        <a class="btn btn-outline" href="{{ url_for('usuarios_listado') }}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+          Cancelar
+        </a>
+      </div>
+    </form>
+  </div>
+</section>
+
+<style>
+  .roles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 12px;
+  }
+
+  .role-card {
+    position: relative;
+  }
+
+  .role-radio {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .role-label {
+    display: block;
+    padding: 16px;
+    background: #0f1a2e;
+    border: 1px solid #1f2a44;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    height: 100%;
+  }
+
+  .role-radio:checked + .role-label {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 1px #3b82f6;
+  }
+
+  .role-radio:focus + .role-label {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  }
+
+  .role-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    color: #3b82f6;
+  }
+
+  .role-radio:checked + .role-label .role-icon {
+    background: rgba(59, 130, 246, 0.2);
+  }
+
+  .role-title {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #e2e8f0;
+  }
+
+  .role-desc {
+    display: block;
+    font-size: 13px;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    min-height: 36px;
+  }
+
+  .role-permissions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+  }
+
+  .permission-badge {
+    display: inline-block;
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .permission-more {
+    font-size: 11px;
+    color: #94a3b8;
+    align-self: center;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #1f2a44;
+  }
+
+  @media (max-width: 768px) {
+    .roles-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}

@@ -1,0 +1,198 @@
+{% extends 'base.html' %}
+{% block title %}Gestión de Permisos{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+      <h2 class="card-title" style="margin:0;">Gestión de Permisos por Usuario</h2>
+    </div>
+    <p class="card-subtitle">Configura qué módulos puede acceder cada usuario y qué acciones puede realizar.</p>
+
+    <!-- Plantillas Predefinidas -->
+    {% if plantillas %}
+    <div style="margin-top:20px; padding:16px; background:#0f1a2e; border-radius:10px; border:1px solid #1f2a44;">
+      <h3 style="margin:0 0 12px 0; font-size:16px; font-weight:600;">Plantillas Predefinidas</h3>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        {% for plantilla in plantillas %}
+        <button type="button" class="btn btn-outline" onclick="aplicarPlantilla({{ plantilla[0] }}, '{{ plantilla[1] }}')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          </svg>
+          {{ plantilla[1] }}
+        </button>
+        {% endfor %}
+      </div>
+      <p style="margin:8px 0 0 0; font-size:13px; color:var(--muted);">Selecciona un usuario y haz clic en una plantilla para aplicar permisos predefinidos.</p>
+    </div>
+    {% endif %}
+
+    {% if usuarios %}
+    <div style="margin-top:24px;">
+      <form method="post" action="{{ url_for('permisos_guardar') }}">
+        <!-- Leyenda -->
+        <div style="margin-bottom:16px; padding:12px; background:#0f1a2e; border-radius:8px; border:1px solid #1f2a44;">
+          <div style="display:flex; gap:24px; flex-wrap:wrap; font-size:13px;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <input type="checkbox" checked disabled style="width:16px; height:16px;"/>
+              <span><strong>V</strong> = Ver módulo</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="display:inline-block; width:16px; height:16px; background:#1e40af; border-radius:3px; text-align:center; color:white; font-size:11px; line-height:16px; font-weight:700;">C</span>
+              <span><strong>C</strong> = Crear</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="display:inline-block; width:16px; height:16px; background:#059669; border-radius:3px; text-align:center; color:white; font-size:11px; line-height:16px; font-weight:700;">E</span>
+              <span><strong>E</strong> = Editar</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="display:inline-block; width:16px; height:16px; background:#dc2626; border-radius:3px; text-align:center; color:white; font-size:11px; line-height:16px; font-weight:700;">X</span>
+              <span><strong>X</strong> = Eliminar</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="overflow:auto;">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr style="text-align:left; border-bottom:2px solid #1f2a44; color:var(--muted);">
+                <th style="padding:12px 8px;">
+                  <input type="checkbox" id="selUsuarioAll" aria-label="Seleccionar todos los usuarios" style="width:18px; height:18px;"/>
+                </th>
+                <th style="padding:12px 8px;">Usuario</th>
+                <th style="padding:12px 8px;">Rol</th>
+                {% for mod in modulos %}
+                <th style="padding:12px 8px; text-align:center; min-width:120px;">
+                  <div style="font-size:12px; font-weight:600;">{{ mod[1] }}</div>
+                  <div style="display:flex; gap:4px; justify-content:center; margin-top:4px; font-size:10px;">
+                    <span title="Ver">V</span>
+                    <span title="Crear">C</span>
+                    <span title="Editar">E</span>
+                    <span title="Eliminar">X</span>
+                  </div>
+                </th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for usuario in usuarios %}
+              <tr style="border-bottom:1px solid #1f2a44;" data-usuario-id="{{ usuario[0] }}">
+                <td style="padding:12px 8px;">
+                  <input type="checkbox" class="selUsuario" value="{{ usuario[0] }}" aria-label="Seleccionar usuario {{ usuario[1] }}" style="width:18px; height:18px;"/>
+                </td>
+                <td style="padding:12px 8px; font-weight:600;">{{ usuario[1] }}</td>
+                <td style="padding:12px 8px;">
+                  <span style="display:inline-block; padding:4px 10px; background:#1e40af; border-radius:6px; font-size:12px; font-weight:500;">
+                    {{ usuario[2] if usuario[2] else 'Sin rol' }}
+                  </span>
+                </td>
+                {% for mod in modulos %}
+                <td style="padding:12px 8px; text-align:center;">
+                  <div style="display:flex; gap:4px; justify-content:center;">
+                    <!-- Ver -->
+                    <input 
+                      type="checkbox" 
+                      name="ver_{{ usuario[0] }}_{{ mod[0] }}" 
+                      value="1"
+                      {% if usuario[0]|string in permisos and mod[0] in permisos[usuario[0]|string] and permisos[usuario[0]|string][mod[0]]['ver'] %}checked{% endif %}
+                      style="width:16px; height:16px; cursor:pointer;"
+                      title="Ver módulo"
+                    />
+                    <!-- Crear -->
+                    <input 
+                      type="checkbox" 
+                      name="crear_{{ usuario[0] }}_{{ mod[0] }}" 
+                      value="1"
+                      {% if usuario[0]|string in permisos and mod[0] in permisos[usuario[0]|string] and permisos[usuario[0]|string][mod[0]]['crear'] %}checked{% endif %}
+                      style="width:16px; height:16px; cursor:pointer; accent-color:#1e40af;"
+                      title="Crear"
+                    />
+                    <!-- Editar -->
+                    <input 
+                      type="checkbox" 
+                      name="editar_{{ usuario[0] }}_{{ mod[0] }}" 
+                      value="1"
+                      {% if usuario[0]|string in permisos and mod[0] in permisos[usuario[0]|string] and permisos[usuario[0]|string][mod[0]]['editar'] %}checked{% endif %}
+                      style="width:16px; height:16px; cursor:pointer; accent-color:#059669;"
+                      title="Editar"
+                    />
+                    <!-- Eliminar -->
+                    <input 
+                      type="checkbox" 
+                      name="eliminar_{{ usuario[0] }}_{{ mod[0] }}" 
+                      value="1"
+                      {% if usuario[0]|string in permisos and mod[0] in permisos[usuario[0]|string] and permisos[usuario[0]|string][mod[0]]['eliminar'] %}checked{% endif %}
+                      style="width:16px; height:16px; cursor:pointer; accent-color:#dc2626;"
+                      title="Eliminar"
+                    />
+                  </div>
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin-top:24px; display:flex; gap:12px;">
+          <button type="submit" class="btn btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Guardar Permisos
+          </button>
+          <a href="{{ url_for('usuarios_listado') }}" class="btn btn-outline">Cancelar</a>
+        </div>
+      </form>
+    </div>
+    {% else %}
+    <p style="margin-top:16px; color:var(--muted);">No hay usuarios registrados.</p>
+    {% endif %}
+  </div>
+</section>
+
+<script>
+  // Seleccionar todos los usuarios
+  const selAll = document.getElementById('selUsuarioAll');
+  const selUsuarios = document.querySelectorAll('.selUsuario');
+  
+  if (selAll) {
+    selAll.addEventListener('change', () => {
+      selUsuarios.forEach(cb => cb.checked = selAll.checked);
+    });
+  }
+
+  // Aplicar plantilla a usuarios seleccionados
+  async function aplicarPlantilla(idPlantilla, nombrePlantilla) {
+    const usuariosSeleccionados = Array.from(selUsuarios).filter(cb => cb.checked).map(cb => cb.value);
+    
+    if (usuariosSeleccionados.length === 0) {
+      alert('Selecciona al menos un usuario para aplicar la plantilla.');
+      return;
+    }
+    
+    if (!confirm(`¿Aplicar plantilla "${nombrePlantilla}" a ${usuariosSeleccionados.length} usuario(s)?`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch('{{ url_for("permisos_aplicar_plantilla") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          id_plantilla: idPlantilla,
+          usuarios: usuariosSeleccionados
+        })
+      });
+      
+      if (response.ok) {
+        window.location.reload();
+      } else {
+        alert('Error aplicando plantilla');
+      }
+    } catch (error) {
+      alert('Error aplicando plantilla: ' + error);
+    }
+  }
+</script>
+{% endblock %}

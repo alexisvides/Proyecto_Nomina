@@ -1,31 +1,40 @@
 {% extends 'base.html' %}
-{% block title %}Nuevo puesto{% endblock %}
+{% block title %}Nuevo Puesto{% endblock %}
 
 {% block content %}
 <section class="section">
-  <div class="card auth-card" style="max-width:100%">
-    <h2 class="card-title">Nuevo peusto</h2>
-    <p class="card-subtitle">Completa los datos del puesto</p>
+  <div class="card auth-card" style="max-width:640px;">
+    <h2 class="card-title">Nuevo Puesto</h2>
+    <p class="card-subtitle">Crea un nuevo puesto en el departamento <strong>{{ departamento_nombre }}</strong></p>
 
     <form class="form" method="post">
-      <!--
       <div class="form-group">
-        <label for="IdDepartamento">Código de departamento</label>
-        <input id="IdDepartamento" name="IdDepartamento" type="text" placeholder="Ej. EMP-0001" required />
-      </div>
-      -->
-      <div class="form-group">
-        <label for="nombre">Nombre</label>
-        <input id="nombre" name="nombre" type="text" required />
+        <label for="titulo">Título del Puesto</label>
+        <input id="titulo" name="titulo" type="text" placeholder="Ej. Gerente de Ventas" required />
       </div>
 
       <div class="form-group">
         <label for="descripcion">Descripción</label>
-        <input id="descripcion" name="descripcion" type="text" required />
+        <textarea id="descripcion" name="descripcion" rows="4" 
+                  placeholder="Descripción opcional del puesto y sus responsabilidades"></textarea>
       </div>
-      <div style="display:flex; gap:10px;">
-        <button class="btn btn-primary" type="submit">Guardar</button>
-        <a class="btn btn-outline" href="{{ url_for('departamentos_listado') }}">Cancelar</a>
+
+      <div style="display:flex; gap:12px; margin-top:24px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          Crear Puesto
+        </button>
+        <a href="{{ url_for('departamentos_listado') }}" class="btn btn-secondary" style="flex:1;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+          Cancelar
+        </a>
       </div>
     </form>
   </div>

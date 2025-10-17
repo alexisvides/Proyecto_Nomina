@@ -4,10 +4,13 @@
 {% block content %}
 <section class="section">
   <div class="card">
+    {% set permisos = obtener_permisos_usuario_modulo('Beneficios') %}
     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
       <h2 class="card-title" style="margin:0;">Deducciones y Prestaciones</h2>
       <div style="display:flex; gap:8px; align-items:center;">
+        {% if permisos.editar or permisos.eliminar %}
         <div id="toolbarBen" style="display:flex; gap:6px; align-items:center;">
+          {% if permisos.editar %}
           <button id="btnBenEditar" class="btn btn-outline" type="button" disabled>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
               <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
@@ -20,19 +23,25 @@
             </svg>
             Activar/Desactivar
           </button>
+          {% endif %}
+          {% if permisos.eliminar %}
           <button id="btnBenEliminar" class="btn btn-outline" type="button" disabled>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
             </svg>
             Eliminar
           </button>
+          {% endif %}
         </div>
+        {% endif %}
+        {% if permisos.crear %}
         <a class="btn btn-primary" href="{{ url_for('beneficios_nuevo') }}">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
           Nuevo
         </a>
+        {% endif %}
       </div>
     </div>
 
@@ -60,13 +69,19 @@
                 <td style="padding:10px 8px; text-transform:capitalize;">{{ it[2] }}</td>
                 <td style="padding:10px 8px; text-transform:capitalize;">{{ it[3] }}</td>
                 <td style="padding:10px 8px;">{{ it[4] }}</td>
-                <td style="padding:10px 8px;">{{ 'Sí' if it[5] else 'No' }}</td>
+                <td style="padding:10px 8px;">
+                  {% if it[5] %}
+                    <span class="status-badge status-active">Sí</span>
+                  {% else %}
+                    <span class="status-badge status-inactive">No</span>
+                  {% endif %}
+                </td>
                 <td style="padding:10px 8px;">&nbsp;</td>
               </tr>
             {% endfor %}
           {% else %}
             <tr>
-              <td colspan="7" style="padding:12px; color:var(--muted);">No hay registros.</td>
+              <td colspan="8" style="padding:12px; color:var(--muted);">No hay registros.</td>
             </tr>
           {% endif %}
         </tbody>
@@ -99,7 +114,7 @@
     if(btnEditar){
       btnEditar.addEventListener('click', ()=>{
         const ids = selectedIds(); if(ids.length!==1) return;
-        const url = "{{ url_for('beneficios_editar', bid=0) }}".replace('0', ids[0]);
+        const url = "{{ url_for('beneficios_editar', id_beneficio=0) }}".replace('0', ids[0]);
         window.location = url;
       });
     }
@@ -115,16 +130,40 @@
     if(btnToggle){
       btnToggle.addEventListener('click', ()=>{
         const ids = selectedIds(); if(!ids.length) return;
-        postEach("{{ url_for('beneficios_toggle', bid=0) }}", ids);
+        postEach("{{ url_for('beneficios_toggle', id_beneficio=0) }}", ids);
       });
     }
     if(btnEliminar){
       btnEliminar.addEventListener('click', ()=>{
         const ids = selectedIds(); if(!ids.length) return;
         if(!confirm('¿Eliminar los conceptos seleccionados? Esta acción no se puede deshacer.')) return;
-        postEach("{{ url_for('beneficios_eliminar', bid=0) }}", ids);
+        postEach("{{ url_for('beneficios_eliminar', id_beneficio=0) }}", ids);
       });
     }
   })();
 </script>
+
+<style>
+  .status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-align: center;
+    min-width: 50px;
+  }
+
+  .status-active {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .status-inactive {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+</style>
 {% endblock %}

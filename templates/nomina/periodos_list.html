@@ -54,7 +54,7 @@
           <tr style="text-align:left; border-bottom:1px solid #1f2a44; color:var(--muted);">
             <th style="padding:10px 8px; width:36px;"><input id="selAll" type="checkbox" aria-label="Seleccionar todos"/></th>
             <th style="padding:10px 8px;">ID</th>
-{{ ... }}
+            <th style="padding:10px 8px;">Inicio</th>
             <th style="padding:10px 8px;">Fin</th>
             <th style="padding:10px 8px;">Tipo</th>
             <th style="padding:10px 8px;">Creado</th>
@@ -121,11 +121,11 @@
     }
 
     // Precalcular URLs mediante data-attributes para evitar conflictos de comillas en Jinja
-    if(btnVer){ btnVer.setAttribute('data-url', "{{ url_for(\"periodo_detalle\", id_periodo=0) }}"); }
-    if(btnCSV){ btnCSV.setAttribute('data-url', "{{ url_for(\"periodo_csv\", id_periodo=0) }}"); }
-    if(btnGenerar){ btnGenerar.setAttribute('data-url', "{{ url_for(\"generar_nomina\", id_periodo=0) }}"); }
-    if(btnRecalcular){ btnRecalcular.setAttribute('data-url', "{{ url_for(\"periodos_recalcular\", id_periodo=0) }}"); }
-    if(btnEliminar){ btnEliminar.setAttribute('data-url', "{{ url_for(\"periodos_eliminar\", id_periodo=0) }}"); }
+    if(btnVer){ btnVer.setAttribute('data-url', "{{ url_for('periodo_detalle', id_periodo=0) }}"); }
+    if(btnCSV){ btnCSV.setAttribute('data-url', "{{ url_for('periodo_csv', id_periodo=0) }}"); }
+    if(btnGenerar){ btnGenerar.setAttribute('data-url', "{{ url_for('generar_nomina', id_periodo=0) }}"); }
+    if(btnRecalcular){ btnRecalcular.setAttribute('data-url', "{{ url_for('periodos_recalcular', id_periodo=0) }}"); }
+    if(btnEliminar){ btnEliminar.setAttribute('data-url', "{{ url_for('periodos_eliminar', id_periodo=0) }}"); }
 
     if(btnVer){ btnVer.addEventListener('click', function(){
       const ids = selectedIds(); if(ids.length!==1) return; const url = this.getAttribute('data-url').replace('0', ids[0]); window.location = url;

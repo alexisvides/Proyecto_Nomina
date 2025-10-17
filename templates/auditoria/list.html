@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Auditoría{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+      <h2 class="card-title" style="margin:0;">Auditoría</h2>
+    </div>
+    <p class="card-subtitle">Registro de acciones y eventos del sistema (últimos 200 registros).</p>
+
+    <div style="overflow:auto; margin-top:16px;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid #1f2a44; color:var(--muted);">
+            <th style="padding:10px 8px;">ID</th>
+            <th style="padding:10px 8px;">Usuario</th>
+            <th style="padding:10px 8px;">Acción</th>
+            <th style="padding:10px 8px;">Módulo</th>
+            <th style="padding:10px 8px;">Detalles</th>
+            <th style="padding:10px 8px;">Fecha/Hora</th>
+            <th style="padding:10px 8px;">IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if logs %}
+            {% for log in logs %}
+            <tr style="border-bottom:1px solid #1f2a44;">
+              <td style="padding:10px 8px;">{{ log[0] }}</td>
+              <td style="padding:10px 8px;">{{ log[1] if log[1] else '—' }}</td>
+              <td style="padding:10px 8px;">{{ log[2] }}</td>
+              <td style="padding:10px 8px;">{{ log[3] if log[3] else '—' }}</td>
+              <td style="padding:10px 8px;">{{ log[4] if log[4] else '—' }}</td>
+              <td style="padding:10px 8px;">{{ log[5] }}</td>
+              <td style="padding:10px 8px;">{{ log[6] if log[6] else '—' }}</td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="7" style="padding:12px; color:var(--muted);">No hay registros de auditoría.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

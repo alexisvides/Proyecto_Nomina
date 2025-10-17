@@ -32,35 +32,68 @@
   <div class="layout">
     {% if not hide_sidebar %}
     <aside class="sidebar">
+      {% if 'Dashboard' in permisos_usuario %}
       <div class="sidebar-section">
         <div class="sidebar-title">General</div>
         <a class="nav-link{% if request.endpoint == 'dashboard' %} active{% endif %}" href="{{ url_for('dashboard') }}" aria-current="{% if request.endpoint == 'dashboard' %}page{% endif %}">Dashboard</a>
       </div>
+      {% endif %}
+      
+      {% if 'Periodos' in permisos_usuario %}
       <div class="sidebar-section">
         <div class="sidebar-title">Nómina</div>
         <a class="nav-link{% if request.endpoint in ['periodos_listado','periodos_nuevo'] %} active{% endif %}" href="{{ url_for('periodos_listado') }}" aria-current="{% if request.endpoint in ['periodos_listado','periodos_nuevo'] %}page{% endif %}">Periodos de nómina</a>
-        <!-- Se pueden agregar enlaces a registros, items, resumen cuando existan rutas -->
       </div>
+      {% endif %}
+      
+      {% if 'Empleados' in permisos_usuario or 'Departamentos' in permisos_usuario or 'Beneficios' in permisos_usuario %}
       <div class="sidebar-section">
         <div class="sidebar-title">Catálogos</div>
+        {% if 'Empleados' in permisos_usuario %}
         <a class="nav-link{% if request.endpoint in ['empleados_listado','empleados_nuevo'] %} active{% endif %}" href="{{ url_for('empleados_listado') }}" aria-current="{% if request.endpoint in ['empleados_listado','empleados_nuevo'] %}page{% endif %}">Empleados</a>
-        <a class="nav-link{% if request.endpoint in ['departamentos_listado','departamentos_nuevo'] %} active{% endif %}" href="{{ url_for('departamentos_listado') }}" aria-current="{% if request.endpoint in ['departamentos_listado','departamentos_nuevo'] %}page{% endif %}">Departamentos</a>
-        <a class="nav-link{% if request.endpoint in ['puestos_listado','puestos_nuevo'] %} active{% endif %}" href="{{ url_for('puestos_listado') }}" aria-current="{% if request.endpoint in ['puestos_listado','puestos_nuevo'] %}page{% endif %}">Puestos</a>
-
+        {% endif %}
+        {% if 'Departamentos' in permisos_usuario %}
+        <a class="nav-link{% if request.endpoint in ['departamentos_listado','departamentos_nuevo'] %} active{% endif %}" href="{{ url_for('departamentos_listado') }}" aria-current="{% if request.endpoint in ['departamentos_listado','departamentos_nuevo'] %}page{% endif %}">Departamentos y Puestos</a>
+        {% endif %}
+        {% if 'Beneficios' in permisos_usuario %}
         <a class="nav-link{% if request.endpoint in ['beneficios_listado','beneficios_nuevo'] %} active{% endif %}" href="{{ url_for('beneficios_listado') }}" aria-current="{% if request.endpoint in ['beneficios_listado','beneficios_nuevo'] %}page{% endif %}">Deducciones y Prestaciones</a>
+        {% endif %}
       </div>
+      {% endif %}
+      
+      {% if 'Asistencia' in permisos_usuario or 'Reportes' in permisos_usuario or 'Comprobantes' in permisos_usuario %}
       <div class="sidebar-section">
         <div class="sidebar-title">Operación</div>
+        {% if 'Asistencia' in permisos_usuario %}
         <a class="nav-link{% if request.endpoint in ['asistencia_listado','asistencia_nuevo'] %} active{% endif %}" href="{{ url_for('asistencia_listado') }}" aria-current="{% if request.endpoint in ['asistencia_listado','asistencia_nuevo'] %}page{% endif %}">Asistencia</a>
-  <a class="nav-link{% if request.endpoint == 'reportes_listado' %} active{% endif %}" href="{{ url_for('reportes_listado') }}" aria-current="{% if request.endpoint == 'reportes_listado' %}page{% endif %}">Reportes</a>
-  <a class="nav-link{% if request.endpoint == 'comprobantes_listado' %} active{% endif %}" href="{{ url_for('comprobantes_listado') }}" aria-current="{% if request.endpoint == 'comprobantes_listado' %}page{% endif %}">Comprobantes</a>
+        {% endif %}
+        {% if 'Reportes' in permisos_usuario %}
+        <a class="nav-link{% if request.endpoint in ['reportes_listado'] %} active{% endif %}"
+           href="{{ url_for('reportes_listado') }}"
+           aria-current="{% if request.endpoint in ['reportes_listado'] %}page{% endif %}">Reportes</a>
+        {% endif %}
+        {% if 'Comprobantes' in permisos_usuario %}
+        <a class="nav-link{% if request.endpoint in ['comprobantes_listado'] %} active{% endif %}"
+           href="{{ url_for('comprobantes_listado') }}"
+           aria-current="{% if request.endpoint in ['comprobantes_listado'] %}page{% endif %}">Comprobantes</a>
+        {% endif %}
       </div>
+      {% endif %}
+      
+      {% if 'Usuarios' in permisos_usuario or 'Permisos' in permisos_usuario or 'Auditoria' in permisos_usuario %}
       <div class="sidebar-section">
         <div class="sidebar-title">Seguridad</div>
-        <a class="nav-link" href="#">Usuarios y Roles</a>
-        <a class="nav-link" href="#">Auditoría</a>
-  <a class="nav-link{% if request.endpoint == 'seguridad_listado' %} active{% endif %}" href="{{ url_for('seguridad_listado') }}" aria-current="{% if request.endpoint == 'seguridad_listado' %}page{% endif %}">Seguridad</a>
+        {% if 'Usuarios' in permisos_usuario %}
+        <a class="nav-link{% if request.endpoint in ['usuarios_listado','usuarios_nuevo'] %} active{% endif %}" href="{{ url_for('usuarios_listado') }}" aria-current="{% if request.endpoint in ['usuarios_listado','usuarios_nuevo'] %}page{% endif %}">Usuarios y Roles</a>
+        {% endif %}
+        {% if 'Permisos' in permisos_usuario %}
+        <a class="nav-link{% if request.endpoint in ['permisos_listado'] %} active{% endif %}" href="{{ url_for('permisos_listado') }}" aria-current="{% if request.endpoint in ['permisos_listado'] %}page{% endif %}">Permisos por Módulo</a>
+        {% endif %}
+        {% if 'Auditoria' in permisos_usuario %}
+        <a class="nav-link{% if request.endpoint in ['auditoria_listado'] %} active{% endif %}" href="{{ url_for('auditoria_listado') }}" aria-current="{% if request.endpoint in ['auditoria_listado'] %}page{% endif %}">Auditoría</a>
+        {% endif %}
       </div>
+      {% endif %}
     </aside>
     {% endif %}
 
