@@ -21,7 +21,7 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
 
 
 # =============================
-# Utilidades: Auditoría y Roles
+# Utilidades: Auditoría y Roles (JAMES) GENERAR EXCEL PARA EL MÓDULO DE AUDITORÍA PARA FILTRAR POR FECHAS Y USUARIOS
 # =============================
 def registrar_auditoria(accion: str, modulo: str = None, detalles: str = None):
     """Registra una acción en la tabla Auditoria."""
@@ -44,7 +44,7 @@ def registrar_auditoria(accion: str, modulo: str = None, detalles: str = None):
         # Si falla auditoría, no interrumpimos la operación principal
         pass
 
-
+#modificar para que los botones no sean visibles si no se tiene permisos de editar (JAMES)
 def requiere_rol(*roles_permitidos):
     """Decorador para validar que el usuario tenga uno de los roles permitidos."""
     def decorator(f):
@@ -205,7 +205,7 @@ def obtener_permisos_usuario_modulo(nombre_modulo):
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT pu.Ver, pu.Crear, pu.Editar, pu.Eliminar
+                    SELECT pu.TieneAcceso, pu.PuedeCrear, pu.PuedeEditar, pu.PuedeEliminar
                     FROM PermisosUsuarios pu
                     JOIN Modulos m ON m.IdModulo = pu.IdModulo
                     WHERE pu.IdUsuario = ? 
@@ -257,7 +257,7 @@ app.jinja_env.globals.update(
     puede_editar=puede_editar,
     puede_eliminar=puede_eliminar
 )
-
+#finaliza roles (JAMES )
 
 def obtener_pagina_inicio_por_rol(rol_nombre):
     """
@@ -410,17 +410,17 @@ def mis_comprobantes():
                     # Obtener los comprobantes (registros de nómina) del empleado
                     cur.execute("""
                         SELECT 
-                            rn.IdRegistroNomina,
-                            p.Modalidad + ' - ' + CONVERT(varchar(10), p.FechaInicio, 103) + ' a ' + CONVERT(varchar(10), p.FechaFin, 103) as Periodo,
+                            rn.IdNomina,
+                            p.TipoPeriodo + ' - ' + CONVERT(varchar(10), p.FechaInicio, 103) + ' a ' + CONVERT(varchar(10), p.FechaFin, 103) as Periodo,
                             p.FechaInicio,
                             p.FechaFin,
-                            rn.SalarioBruto,
+                            rn.SalarioBase,
                             rn.TotalDeducciones,
                             rn.SalarioNeto,
-                            rn.DiasLaborados,
-                            p.Estado
+                            DATEDIFF(DAY, p.FechaInicio, p.FechaFin) as DiasLaborados,
+                            'Procesado' as Estado
                         FROM RegistrosNomina rn
-                        INNER JOIN Periodos p ON p.IdPeriodo = rn.IdPeriodo
+                        INNER JOIN PeriodosNomina p ON p.IdPeriodo = rn.IdPeriodo
                         WHERE rn.IdEmpleado = ?
                         ORDER BY p.FechaInicio DESC
                     """, (id_empleado,))
@@ -465,26 +465,26 @@ def mi_comprobante_detalle(id_registro: int):
                 # Obtener el registro de nómina con información del periodo
                 cur.execute("""
                     SELECT 
-                        rn.IdRegistroNomina,
+                        rn.IdNomina,
                         rn.IdEmpleado,
                         e.Nombres + ' ' + e.Apellidos as NombreEmpleado,
                         e.CodigoEmpleado,
-                        p.Modalidad,
+                        p.TipoPeriodo,
                         p.FechaInicio,
                         p.FechaFin,
-                        p.Estado,
-                        rn.SalarioBruto,
+                        'Procesado' as Estado,
+                        rn.SalarioBase,
                         rn.TotalDeducciones,
                         rn.SalarioNeto,
-                        rn.DiasLaborados,
+                        DATEDIFF(DAY, p.FechaInicio, p.FechaFin) as DiasLaborados,
                         pu.Titulo as Puesto,
                         d.Nombre as Departamento
                     FROM RegistrosNomina rn
-                    INNER JOIN Periodos p ON p.IdPeriodo = rn.IdPeriodo
+                    INNER JOIN PeriodosNomina p ON p.IdPeriodo = rn.IdPeriodo
                     INNER JOIN Empleados e ON e.IdEmpleado = rn.IdEmpleado
                     LEFT JOIN Puestos pu ON pu.IdPuesto = e.IdPuesto
                     LEFT JOIN Departamentos d ON d.IdDepartamento = pu.IdDepartamento
-                    WHERE rn.IdRegistroNomina = ?
+                    WHERE rn.IdNomina = ?
                 """, (id_registro,))
                 
                 row = cur.fetchone()
@@ -502,21 +502,21 @@ def mi_comprobante_detalle(id_registro: int):
                 # Obtener los items (percepciones y deducciones) del comprobante
                 cur.execute("""
                     SELECT 
-                        i.Descripcion,
+                        bd.Nombre as Descripcion,
                         i.Monto,
-                        bd.Tipo
+                        i.TipoItem as Tipo
                     FROM ItemsNomina i
                     LEFT JOIN BeneficiosDeducciones bd ON bd.IdBeneficioDeduccion = i.IdBeneficioDeduccion
-                    WHERE i.IdRegistroNomina = ?
-                    ORDER BY bd.Tipo, i.Descripcion
+                    WHERE i.IdNomina = ?
+                    ORDER BY i.TipoItem, bd.Nombre
                 """, (id_registro,))
                 
                 items = [dict(zip([column[0] for column in cur.description], row)) 
                         for row in cur.fetchall()]
                 
                 # Separar percepciones y deducciones
-                percepciones = [item for item in items if item['Tipo'] == 'Percepción']
-                deducciones = [item for item in items if item['Tipo'] == 'Deducción']
+                percepciones = [item for item in items if item['Tipo'] == 'prestacion']
+                deducciones = [item for item in items if item['Tipo'] == 'deduccion']
                 
                 return render_template("mi_comprobante_detalle.html",
                                      comprobante=comprobante,
@@ -2587,7 +2587,8 @@ def auditoria_listado():
 
 
 # =============================
-# Comprobantes de Pago (PDF)
+# Comprobantes de Pago (PDF) (JAMES) GENERAR CARGA MASIVA PARA OBTENER UN DOCUMENTO CON TODOS LOS COMPROBANTES DE ACUERDO 
+#CON LOS PERIODOS DE NÓMINA (POR FECHAS)
 # =============================
 def generar_comprobante_pdf(id_nomina: int):
     """Genera un comprobante de pago en PDF para un registro de nómina."""
@@ -2718,25 +2719,271 @@ def generar_comprobante_pdf(id_nomina: int):
     return buffer
 
 
+def generar_comprobante_html(id_nomina: int):
+    """Genera un comprobante de pago en HTML para un registro de nómina."""
+    # Obtener datos del comprobante
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Datos del empleado y periodo
+            cur.execute("""
+                SELECT 
+                    e.IdEmpleado, e.CodigoEmpleado, e.Nombres, e.Apellidos, e.DocumentoIdentidad, e.NumeroIGSS,
+                    p.IdPeriodo, p.FechaInicio, p.FechaFin, p.TipoPeriodo,
+                    rn.SalarioBase, rn.TotalPrestaciones, rn.TotalDeducciones, rn.SalarioNeto,
+                    pu.Titulo as Puesto, d.Nombre as Departamento
+                FROM RegistrosNomina rn
+                JOIN Empleados e ON e.IdEmpleado = rn.IdEmpleado
+                JOIN PeriodosNomina p ON p.IdPeriodo = rn.IdPeriodo
+                LEFT JOIN Puestos pu ON pu.IdPuesto = e.IdPuesto
+                LEFT JOIN Departamentos d ON d.IdDepartamento = pu.IdDepartamento
+                WHERE rn.IdNomina = ?
+            """, (id_nomina,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            
+            empleado = {
+                "id": row[0], "codigo": row[1], "nombres": row[2], "apellidos": row[3],
+                "dpi": row[4], "igss": row[5], "puesto": row[14] or 'N/A', "departamento": row[15] or 'N/A'
+            }
+            periodo = {
+                "id": row[6], "inicio": row[7], "fin": row[8], "tipo": row[9]
+            }
+            nomina = {
+                "salario_base": row[10], "prestaciones": row[11], 
+                "deducciones": row[12], "neto": row[13]
+            }
+            
+            # Items de nómina (prestaciones y deducciones)
+            cur.execute("""
+                SELECT b.Nombre, i.TipoItem, i.Monto
+                FROM ItemsNomina i
+                JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
+                WHERE i.IdNomina = ?
+                ORDER BY i.TipoItem DESC, b.Nombre
+            """, (id_nomina,))
+            items = cur.fetchall()
+    
+    # Separar prestaciones y deducciones
+    prestaciones = [item for item in items if item[1] == 'prestacion']
+    deducciones = [item for item in items if item[1] == 'deduccion']
+    
+    # Generar HTML
+    html = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprobante de Pago - {empleado['codigo']}</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8f9fa; padding: 20px; }}
+        .container {{ max-width: 900px; margin: 0 auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+        .header {{ text-align: center; margin-bottom: 30px; border-bottom: 3px solid #3b82f6; padding-bottom: 20px; }}
+        .header h1 {{ color: #1e40af; font-size: 28px; margin-bottom: 10px; }}
+        .header p {{ color: #64748b; font-size: 14px; }}
+        .section {{ margin-bottom: 25px; }}
+        .section-title {{ background: #f1f5f9; padding: 10px 15px; font-weight: 600; color: #1e293b; font-size: 16px; border-left: 4px solid #3b82f6; margin-bottom: 15px; }}
+        .info-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }}
+        .info-item {{ padding: 12px; background: #f8fafc; border-radius: 6px; }}
+        .info-label {{ font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }}
+        .info-value {{ font-size: 16px; color: #1e293b; font-weight: 600; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+        thead {{ background: #1e40af; color: white; }}
+        th {{ padding: 12px; text-align: left; font-weight: 600; font-size: 14px; }}
+        td {{ padding: 12px; border-bottom: 1px solid #e2e8f0; }}
+        tbody tr:hover {{ background: #f8fafc; }}
+        .text-right {{ text-align: right; }}
+        .prestacion {{ color: #10b981; font-weight: 600; }}
+        .deduccion {{ color: #ef4444; font-weight: 600; }}
+        .resumen {{ background: #f0f9ff; border: 2px solid #3b82f6; border-radius: 8px; padding: 20px; margin-top: 30px; }}
+        .resumen-row {{ display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #cbd5e1; }}
+        .resumen-row:last-child {{ border-bottom: none; border-top: 2px solid #1e40af; padding-top: 15px; margin-top: 10px; }}
+        .resumen-label {{ font-size: 16px; color: #475569; }}
+        .resumen-value {{ font-size: 16px; font-weight: 600; }}
+        .total-label {{ font-size: 20px; font-weight: 700; color: #1e40af; }}
+        .total-value {{ font-size: 24px; font-weight: 700; color: #1e40af; }}
+        .footer {{ text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 12px; }}
+        @media print {{ body {{ padding: 0; background: white; }} .container {{ box-shadow: none; }} }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>COMPROBANTE DE PAGO</h1>
+            <p>Período: {periodo['tipo'].capitalize()} - {periodo['inicio'].strftime('%d/%m/%Y')} al {periodo['fin'].strftime('%d/%m/%Y')}</p>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Información del Empleado</div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Código</div>
+                    <div class="info-value">{empleado['codigo']}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Nombre Completo</div>
+                    <div class="info-value">{empleado['nombres']} {empleado['apellidos']}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">DPI</div>
+                    <div class="info-value">{empleado['dpi']}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">IGSS</div>
+                    <div class="info-value">{empleado['igss'] or 'N/A'}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Puesto</div>
+                    <div class="info-value">{empleado['puesto']}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Departamento</div>
+                    <div class="info-value">{empleado['departamento']}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Percepciones</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Concepto</th>
+                        <th class="text-right">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Salario Base</td>
+                        <td class="text-right prestacion">Q {nomina['salario_base']:,.2f}</td>
+                    </tr>
+"""
+    
+    for item in prestaciones:
+        html += f"""                    <tr>
+                        <td>{item[0]}</td>
+                        <td class="text-right prestacion">Q {item[2]:,.2f}</td>
+                    </tr>
+"""
+    
+    html += """                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Deducciones</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Concepto</th>
+                        <th class="text-right">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+"""
+    
+    if deducciones:
+        for item in deducciones:
+            html += f"""                    <tr>
+                        <td>{item[0]}</td>
+                        <td class="text-right deduccion">Q {item[2]:,.2f}</td>
+                    </tr>
+"""
+    else:
+        html += """                    <tr>
+                        <td colspan="2" style="text-align:center; color:#94a3b8;">Sin deducciones</td>
+                    </tr>
+"""
+    
+    html += f"""                </tbody>
+            </table>
+        </div>
+        
+        <div class="resumen">
+            <div class="resumen-row">
+                <span class="resumen-label">Total Prestaciones:</span>
+                <span class="resumen-value prestacion">Q {nomina['prestaciones']:,.2f}</span>
+            </div>
+            <div class="resumen-row">
+                <span class="resumen-label">Total Deducciones:</span>
+                <span class="resumen-value deduccion">Q {nomina['deducciones']:,.2f}</span>
+            </div>
+            <div class="resumen-row">
+                <span class="total-label">SALARIO NETO:</span>
+                <span class="total-value">Q {nomina['neto']:,.2f}</span>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Generado el {datetime.now().strftime('%d/%m/%Y a las %H:%M')}</p>
+            <p>Este documento es un comprobante de pago oficial.</p>
+        </div>
+    </div>
+</body>
+</html>"""
+    
+    return html
+
+
 @app.route("/comprobantes/<int:id_nomina>/pdf")
 def comprobante_pdf(id_nomina: int):
     """Descarga el comprobante de pago en PDF."""
+    if not session.get("user_id"):
+        flash("Debes iniciar sesión para descargar comprobantes.", "warning")
+        return redirect(url_for("login"))
+    
     try:
+        # Verificar si el usuario tiene permiso de administrador o si es su propio comprobante
+        tiene_permiso_admin = 'Comprobantes' in obtener_permisos_usuario()
+        
+        if not tiene_permiso_admin:
+            # Verificar que el comprobante pertenezca al usuario logueado
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT u.IdEmpleado
+                        FROM Usuarios u
+                        WHERE u.IdUsuario = ?
+                    """, (session.get("user_id"),))
+                    
+                    row = cur.fetchone()
+                    if not row or not row[0]:
+                        flash("Tu usuario no está asociado a ningún empleado.", "warning")
+                        return redirect(url_for("inicio"))
+                    
+                    id_empleado_usuario = row[0]
+                    
+                    # Verificar que el comprobante pertenece al empleado
+                    cur.execute("""
+                        SELECT IdEmpleado FROM RegistrosNomina WHERE IdNomina = ?
+                    """, (id_nomina,))
+                    
+                    row = cur.fetchone()
+                    if not row or row[0] != id_empleado_usuario:
+                        flash("No tienes permiso para descargar este comprobante.", "danger")
+                        return redirect(url_for("mis_comprobantes"))
+        
+        # Generar PDF del comprobante
         pdf_buffer = generar_comprobante_pdf(id_nomina)
         if not pdf_buffer:
             flash("No se encontró el registro de nómina.", "warning")
-            return redirect(url_for("comprobantes_listado"))
+            return redirect(url_for("mis_comprobantes") if not tiene_permiso_admin else url_for("comprobantes_listado"))
         
         registrar_auditoria("Comprobante PDF generado", "Comprobantes", f"IdNomina: {id_nomina}")
         
-        return Response(
+        response = Response(
             pdf_buffer.getvalue(),
-            mimetype='application/pdf',
-            headers={'Content-Disposition': f'attachment; filename=comprobante_{id_nomina}.pdf'}
+            mimetype='application/pdf'
         )
+        response.headers['Content-Disposition'] = f'attachment; filename="comprobante_{id_nomina}.pdf"'
+        response.headers['Content-Type'] = 'application/pdf'
+        return response
     except Exception as e:
+        print(f"Error generando PDF: {e}")
         flash(f"Error generando comprobante: {e}", "danger")
-        return redirect(url_for("comprobantes_listado"))
+        tiene_permiso_admin = 'Comprobantes' in obtener_permisos_usuario()
+        return redirect(url_for("mis_comprobantes") if not tiene_permiso_admin else url_for("comprobantes_listado"))
 
 
 @app.route("/comprobantes", methods=["GET"])

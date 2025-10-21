@@ -46,13 +46,13 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th style="width:40%;">Periodo</th>
+              <th style="width:35%;">Periodo</th>
               <th style="text-align:center;">Días Laborados</th>
-              <th style="text-align:right;">Salario Bruto</th>
+              <th style="text-align:right;">Salario Base</th>
               <th style="text-align:right;">Deducciones</th>
               <th style="text-align:right;">Salario Neto</th>
               <th style="text-align:center;">Estado</th>
-              <th style="text-align:center; width:80px;">Detalle</th>
+              <th style="text-align:center; width:140px;">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -67,7 +67,7 @@
                 </span>
               </td>
               <td style="text-align:right; font-weight:600; color:#10b981;">
-                Q {{ "{:,.2f}".format(comp.SalarioBruto) }}
+                Q {{ "{:,.2f}".format(comp.SalarioBase) }}
               </td>
               <td style="text-align:right; font-weight:600; color:#ef4444;">
                 Q {{ "{:,.2f}".format(comp.TotalDeducciones) }}
@@ -91,15 +91,28 @@
                 {% endif %}
               </td>
               <td style="text-align:center;">
-                <a href="{{ url_for('mi_comprobante_detalle', id_registro=comp.IdRegistroNomina) }}" 
-                   class="btn btn-outline" 
-                   style="padding:6px 12px; font-size:0.875rem;"
-                   title="Ver detalle">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </a>
+                <div style="display:flex; gap:8px; justify-content:center; align-items:center;">
+                  <a href="{{ url_for('mi_comprobante_detalle', id_registro=comp.IdNomina) }}" 
+                     class="btn btn-outline" 
+                     style="padding:6px 10px; font-size:0.875rem;"
+                     title="Ver detalle">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </a>
+                  <a href="{{ url_for('comprobante_pdf', id_nomina=comp.IdNomina) }}" 
+                     class="btn btn-primary" 
+                     style="padding:6px 10px; font-size:0.875rem;"
+                     title="Descargar PDF"
+                     target="_blank">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                  </a>
+                </div>
               </td>
             </tr>
             {% endfor %}

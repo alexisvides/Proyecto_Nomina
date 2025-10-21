@@ -8,15 +8,28 @@
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:2rem; padding-bottom:1rem; border-bottom:2px solid #1f2a44;">
       <div>
         <h2 class="card-title" style="margin:0;">Comprobante de Pago</h2>
-        <p class="card-subtitle" style="margin-top:0.5rem;">{{ comprobante.Modalidad }} - {{ comprobante.FechaInicio.strftime('%d/%m/%Y') }} a {{ comprobante.FechaFin.strftime('%d/%m/%Y') }}</p>
+        <p class="card-subtitle" style="margin-top:0.5rem;">{{ comprobante.TipoPeriodo }} - {{ comprobante.FechaInicio.strftime('%d/%m/%Y') }} a {{ comprobante.FechaFin.strftime('%d/%m/%Y') }}</p>
       </div>
-      <a href="{{ url_for('mis_comprobantes') }}" class="btn btn-outline">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
-          <line x1="19" y1="12" x2="5" y2="12"/>
-          <polyline points="12 19 5 12 12 5"/>
-        </svg>
-        Volver
-      </a>
+      <div style="display:flex; gap:12px;">
+        <a href="{{ url_for('comprobante_pdf', id_nomina=comprobante.IdNomina) }}" 
+           class="btn btn-primary"
+           target="_blank"
+           title="Descargar PDF">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Descargar PDF
+        </a>
+        <a href="{{ url_for('mis_comprobantes') }}" class="btn btn-outline">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <line x1="19" y1="12" x2="5" y2="12"/>
+            <polyline points="12 19 5 12 12 5"/>
+          </svg>
+          Volver
+        </a>
+      </div>
     </div>
 
     <!-- Información del Empleado -->
@@ -119,8 +132,8 @@
     <!-- Resumen Final -->
     <div style="background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:2px solid #334155; border-radius:12px; padding:1.5rem;">
       <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 0; border-bottom:1px solid #334155;">
-        <span style="font-size:1rem; color:#cbd5e1;">Salario Bruto</span>
-        <span style="font-size:1.125rem; font-weight:600; color:#10b981;">Q {{ "{:,.2f}".format(comprobante.SalarioBruto) }}</span>
+        <span style="font-size:1rem; color:#cbd5e1;">Salario Base</span>
+        <span style="font-size:1.125rem; font-weight:600; color:#10b981;">Q {{ "{:,.2f}".format(comprobante.SalarioBase) }}</span>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 0; border-bottom:1px solid #334155;">
         <span style="font-size:1rem; color:#cbd5e1;">Total Deducciones</span>
