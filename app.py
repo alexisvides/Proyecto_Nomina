@@ -27,17 +27,16 @@ def registrar_auditoria(accion: str, modulo: str = None, detalles: str = None):
     """Registra una acción en la tabla Auditoria."""
     try:
         id_usuario = session.get("user_id")
-        nombre_usuario = session.get("username")
-        ip = request.remote_addr
+        ip = request.remote_addr if request else None
         
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO Auditoria (IdUsuario, NombreUsuario, Accion, Modulo, Detalles, DireccionIP)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO Auditoria (IdUsuario, Accion, Tabla, Detalles, DireccionIP)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    (id_usuario, nombre_usuario, accion, modulo, detalles, ip)
+                    (id_usuario, accion, modulo, detalles, ip)
                 )
                 conn.commit()
     except Exception:
@@ -410,8 +409,8 @@ def mis_comprobantes():
                     # Obtener los comprobantes (registros de nómina) del empleado
                     cur.execute("""
                         SELECT 
-                            rn.IdNomina,
-                            p.TipoPeriodo + ' - ' + CONVERT(varchar(10), p.FechaInicio, 103) + ' a ' + CONVERT(varchar(10), p.FechaFin, 103) as Periodo,
+                            rn.IdRegistroNomina,
+                            p.Modalidad + ' - ' + CONVERT(varchar(10), p.FechaInicio, 103) + ' a ' + CONVERT(varchar(10), p.FechaFin, 103) as Periodo,
                             p.FechaInicio,
                             p.FechaFin,
                             rn.SalarioBase,
@@ -420,7 +419,7 @@ def mis_comprobantes():
                             DATEDIFF(DAY, p.FechaInicio, p.FechaFin) as DiasLaborados,
                             'Procesado' as Estado
                         FROM RegistrosNomina rn
-                        INNER JOIN PeriodosNomina p ON p.IdPeriodo = rn.IdPeriodo
+                        INNER JOIN Periodos p ON p.IdPeriodo = rn.IdPeriodo
                         WHERE rn.IdEmpleado = ?
                         ORDER BY p.FechaInicio DESC
                     """, (id_empleado,))
@@ -465,11 +464,11 @@ def mi_comprobante_detalle(id_registro: int):
                 # Obtener el registro de nómina con información del periodo
                 cur.execute("""
                     SELECT 
-                        rn.IdNomina,
+                        rn.IdRegistroNomina,
                         rn.IdEmpleado,
                         e.Nombres + ' ' + e.Apellidos as NombreEmpleado,
                         e.CodigoEmpleado,
-                        p.TipoPeriodo,
+                        p.Modalidad,
                         p.FechaInicio,
                         p.FechaFin,
                         'Procesado' as Estado,
@@ -480,11 +479,11 @@ def mi_comprobante_detalle(id_registro: int):
                         pu.Titulo as Puesto,
                         d.Nombre as Departamento
                     FROM RegistrosNomina rn
-                    INNER JOIN PeriodosNomina p ON p.IdPeriodo = rn.IdPeriodo
+                    INNER JOIN Periodos p ON p.IdPeriodo = rn.IdPeriodo
                     INNER JOIN Empleados e ON e.IdEmpleado = rn.IdEmpleado
                     LEFT JOIN Puestos pu ON pu.IdPuesto = e.IdPuesto
                     LEFT JOIN Departamentos d ON d.IdDepartamento = pu.IdDepartamento
-                    WHERE rn.IdNomina = ?
+                    WHERE rn.IdRegistroNomina = ?
                 """, (id_registro,))
                 
                 row = cur.fetchone()
@@ -507,7 +506,7 @@ def mi_comprobante_detalle(id_registro: int):
                         i.TipoItem as Tipo
                     FROM ItemsNomina i
                     LEFT JOIN BeneficiosDeducciones bd ON bd.IdBeneficioDeduccion = i.IdBeneficioDeduccion
-                    WHERE i.IdNomina = ?
+                    WHERE i.IdRegistroNomina = ?
                     ORDER BY i.TipoItem, bd.Nombre
                 """, (id_registro,))
                 
@@ -655,13 +654,13 @@ def dashboard():
             with conn.cursor() as cur:
                 # Estadísticas básicas
                 try:
-                    cur.execute("SELECT COUNT(*) FROM Empleados WHERE FechaFin IS NULL OR FechaFin >= GETDATE()")
+                    cur.execute("SELECT COUNT(*) FROM Empleados WHERE FechaEgreso IS NULL OR FechaEgreso >= GETDATE()")
                     stats["empleados"] = cur.fetchone()[0]
                 except Exception as e:
                     print(f"Error contando empleados: {e}")
                 
                 try:
-                    cur.execute("SELECT COUNT(*) FROM PeriodosNomina")
+                    cur.execute("SELECT COUNT(*) FROM Periodos")
                     stats["periodos"] = cur.fetchone()[0]
                 except Exception as e:
                     print(f"Error contando periodos: {e}")
@@ -728,7 +727,7 @@ def dashboard():
                         SELECT TOP 6
                             FORMAT(p.FechaInicio, 'MMM yyyy') as Mes,
                             ISNULL(SUM(rn.SalarioNeto), 0) as TotalPagado
-                        FROM PeriodosNomina p
+                        FROM Periodos p
                         LEFT JOIN RegistrosNomina rn ON rn.IdPeriodo = p.IdPeriodo
                         WHERE p.FechaInicio >= DATEADD(MONTH, -6, GETDATE())
                         GROUP BY p.FechaInicio, FORMAT(p.FechaInicio, 'MMM yyyy')
@@ -785,8 +784,9 @@ def periodos_listado():
                     """
                     SELECT IdPeriodo, CONVERT(varchar(10), FechaInicio, 23) as FechaInicio,
                            CONVERT(varchar(10), FechaFin, 23) as FechaFin,
-                           TipoPeriodo, CONVERT(varchar(19), FechaCreacion, 120) as FechaCreacion
-                    FROM PeriodosNomina
+                           Modalidad, CONVERT(varchar(19), FechaCreacion, 120) as FechaCreacion,
+                           Descripcion, Estado
+                    FROM Periodos
                     ORDER BY FechaInicio DESC
                     """
                 )
@@ -842,12 +842,19 @@ def periodos_nuevo():
 
             with get_connection() as conn:
                 with conn.cursor() as cur:
+                    # Generar descripción del periodo
+                    if modalidad == "mensual":
+                        descripcion = f"Mensual {fi.strftime('%B %Y')}"
+                    else:
+                        quincena = 1 if tipo == "quincena1" else 2
+                        descripcion = f"Quincena {quincena} de {fi.strftime('%B %Y')}"
+                    
                     cur.execute(
                         """
-                        INSERT INTO PeriodosNomina (FechaInicio, FechaFin, TipoPeriodo)
-                        VALUES (?, ?, ?)
+                        INSERT INTO Periodos (Descripcion, FechaInicio, FechaFin, Modalidad, Estado)
+                        VALUES (?, ?, ?, ?, 'Borrador')
                         """,
-                        (fi, ff, tipo),
+                        (descripcion, fi, ff, modalidad.capitalize()),
                     )
                     conn.commit()
             flash("Periodo creado correctamente.", "success")
@@ -871,7 +878,7 @@ def periodos_recalcular(id_periodo: int):
                     """
                     DELETE i
                     FROM ItemsNomina i
-                    JOIN RegistrosNomina rn ON rn.IdNomina = i.IdNomina
+                    JOIN RegistrosNomina rn ON rn.IdRegistroNomina = i.IdRegistroNomina
                     WHERE rn.IdPeriodo = ?
                     """,
                     (id_periodo,),
@@ -905,7 +912,7 @@ def periodos_recalcular(id_periodo: int):
                         FROM BeneficiosDeducciones b
                     ),
                     Src AS (
-                        SELECT rn.IdNomina,
+                        SELECT rn.IdRegistroNomina,
                                c.IdBeneficioDeduccion,
                                CASE WHEN COALESCE(eb.Activo, c.Activo) = 1 THEN 1 ELSE 0 END AS Usar,
                                CASE 
@@ -952,14 +959,14 @@ def generar_nomina(id_periodo: int):
             with conn.cursor() as cur:
                 # Verificar que exista el periodo y obtener rango
                 cur.execute(
-                    "SELECT COUNT(1) FROM PeriodosNomina WHERE IdPeriodo = ?",
+                    "SELECT COUNT(1) FROM Periodos WHERE IdPeriodo = ?",
                     (id_periodo,),
                 )
                 exists = cur.fetchone()[0]
                 if not exists:
                     flash("El periodo no existe.", "warning")
                     return redirect(url_for("periodos_listado"))
-                cur.execute("SELECT FechaInicio, FechaFin FROM PeriodosNomina WHERE IdPeriodo = ?", (id_periodo,))
+                cur.execute("SELECT FechaInicio, FechaFin FROM Periodos WHERE IdPeriodo = ?", (id_periodo,))
                 fi, ff = cur.fetchone()
 
                 # Insertar RegistrosNomina para empleados activos que aún no lo tengan, prorrateado por asistencia
@@ -1012,8 +1019,8 @@ def generar_nomina(id_periodo: int):
                              ELSE e.SalarioBase
                            END
                     FROM Empleados e
-                    WHERE e.FechaContratacion <= @ff
-                      AND (e.FechaFin IS NULL OR e.FechaFin >= @fi)
+                    WHERE e.FechaIngreso <= @ff
+                      AND (e.FechaEgreso IS NULL OR e.FechaEgreso >= @fi)
                       AND NOT EXISTS (
                         SELECT 1 FROM RegistrosNomina rn
                         WHERE rn.IdEmpleado = e.IdEmpleado AND rn.IdPeriodo = ?
@@ -1047,7 +1054,7 @@ def generar_nomina(id_periodo: int):
                         FROM BeneficiosDeducciones b
                     ),
                     Src AS (
-                        SELECT rn.IdNomina,
+                        SELECT rn.IdRegistroNomina,
                                c.IdBeneficioDeduccion,
                                CASE WHEN COALESCE(eb.Activo, c.Activo) = 1 THEN 1 ELSE 0 END AS Usar,
                                CASE 
@@ -1063,13 +1070,13 @@ def generar_nomina(id_periodo: int):
                         WHERE rn.IdPeriodo = ?
                           AND c.Nombre <> 'ISR'
                     )
-                    INSERT INTO ItemsNomina (IdNomina, IdBeneficioDeduccion, TipoItem, Monto)
-                    SELECT s.IdNomina, s.IdBeneficioDeduccion, s.TipoItem, s.Monto
+                    INSERT INTO ItemsNomina (IdRegistroNomina, IdBeneficioDeduccion, TipoItem, Monto)
+                    SELECT s.IdRegistroNomina, s.IdBeneficioDeduccion, s.TipoItem, s.Monto
                     FROM Src s
                     WHERE s.Usar = 1
                       AND NOT EXISTS (
                           SELECT 1 FROM ItemsNomina i
-                          WHERE i.IdNomina = s.IdNomina AND i.IdBeneficioDeduccion = s.IdBeneficioDeduccion
+                          WHERE i.IdRegistroNomina = s.IdRegistroNomina AND i.IdBeneficioDeduccion = s.IdBeneficioDeduccion
                       )
                     """,
                     (id_periodo,)
@@ -1103,12 +1110,12 @@ def _consultar_detalle_periodo(id_periodo: int):
                         ) d
                     ), 0) AS DiasLaborados,
                     -- Número IGSS (columna dedicada)
-                    e.NumeroIGSS AS NumeroIGSS,
+                    e.NIT AS NumeroIGSS,
                     -- Total deducciones (según tipo del catálogo)
                     ISNULL((
                         SELECT SUM(i.Monto)
                         FROM RegistrosNomina rn
-                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN ItemsNomina i ON i.IdRegistroNomina = rn.IdRegistroNomina
                         JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
                         WHERE rn.IdPeriodo = p.IdPeriodo
                           AND rn.IdEmpleado = e.IdEmpleado
@@ -1118,7 +1125,7 @@ def _consultar_detalle_periodo(id_periodo: int):
                     ISNULL((
                         SELECT SUM(i.Monto)
                         FROM RegistrosNomina rn
-                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN ItemsNomina i ON i.IdRegistroNomina = rn.IdRegistroNomina
                         JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
                         WHERE rn.IdPeriodo = p.IdPeriodo
                           AND rn.IdEmpleado = e.IdEmpleado
@@ -1128,7 +1135,7 @@ def _consultar_detalle_periodo(id_periodo: int):
                     ISNULL((
                         SELECT SUM(i.Monto)
                         FROM RegistrosNomina rn
-                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN ItemsNomina i ON i.IdRegistroNomina = rn.IdRegistroNomina
                         JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
                         WHERE rn.IdPeriodo = p.IdPeriodo
                           AND rn.IdEmpleado = e.IdEmpleado
@@ -1139,7 +1146,7 @@ def _consultar_detalle_periodo(id_periodo: int):
                     ISNULL((
                         SELECT SUM(i.Monto)
                         FROM RegistrosNomina rn
-                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN ItemsNomina i ON i.IdRegistroNomina = rn.IdRegistroNomina
                         JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
                         WHERE rn.IdPeriodo = p.IdPeriodo
                           AND rn.IdEmpleado = e.IdEmpleado
@@ -1150,7 +1157,7 @@ def _consultar_detalle_periodo(id_periodo: int):
                     (rn0.SalarioBase + ISNULL((
                         SELECT SUM(i.Monto)
                         FROM RegistrosNomina rn
-                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN ItemsNomina i ON i.IdRegistroNomina = rn.IdRegistroNomina
                         JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
                         WHERE rn.IdPeriodo = p.IdPeriodo
                           AND rn.IdEmpleado = e.IdEmpleado
@@ -1160,7 +1167,7 @@ def _consultar_detalle_periodo(id_periodo: int):
                     (rn0.SalarioBase + ISNULL((
                         SELECT SUM(i.Monto)
                         FROM RegistrosNomina rn
-                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN ItemsNomina i ON i.IdRegistroNomina = rn.IdRegistroNomina
                         JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
                         WHERE rn.IdPeriodo = p.IdPeriodo
                           AND rn.IdEmpleado = e.IdEmpleado
@@ -1169,7 +1176,7 @@ def _consultar_detalle_periodo(id_periodo: int):
                     - ISNULL((
                         SELECT SUM(i.Monto)
                         FROM RegistrosNomina rn
-                        JOIN ItemsNomina i ON i.IdNomina = rn.IdNomina
+                        JOIN ItemsNomina i ON i.IdRegistroNomina = rn.IdRegistroNomina
                         JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
                         WHERE rn.IdPeriodo = p.IdPeriodo
                           AND rn.IdEmpleado = e.IdEmpleado
@@ -1177,17 +1184,17 @@ def _consultar_detalle_periodo(id_periodo: int):
                     ), 0)) AS SalarioNeto,
                     -- IdNomina (para acciones, no se exporta en CSV)
                     (
-                        SELECT TOP 1 rn.IdNomina
+                        SELECT TOP 1 rn.IdRegistroNomina
                         FROM RegistrosNomina rn
                         WHERE rn.IdPeriodo = p.IdPeriodo AND rn.IdEmpleado = e.IdEmpleado
-                        ORDER BY rn.IdNomina DESC
+                        ORDER BY rn.IdRegistroNomina DESC
                     ) AS IdNomina
                 FROM Empleados e
-                CROSS JOIN PeriodosNomina p
+                CROSS JOIN Periodos p
                 LEFT JOIN RegistrosNomina rn0 ON rn0.IdEmpleado = e.IdEmpleado AND rn0.IdPeriodo = p.IdPeriodo
                 WHERE p.IdPeriodo = ?
-                  AND e.FechaContratacion <= p.FechaFin
-                  AND (e.FechaFin IS NULL OR e.FechaFin >= p.FechaInicio)
+                  AND e.FechaIngreso <= p.FechaFin
+                  AND (e.FechaEgreso IS NULL OR e.FechaEgreso >= p.FechaInicio)
                 ORDER BY e.Apellidos, e.Nombres
                 """,
                 (id_periodo,),
@@ -1410,7 +1417,7 @@ def periodos_eliminar(id_periodo: int):
                     """
                     DELETE i
                     FROM ItemsNomina i
-                    JOIN RegistrosNomina rn ON rn.IdNomina = i.IdNomina
+                    JOIN RegistrosNomina rn ON rn.IdRegistroNomina = i.IdRegistroNomina
                     WHERE rn.IdPeriodo = ?
                     """,
                     (id_periodo,),
@@ -1418,7 +1425,7 @@ def periodos_eliminar(id_periodo: int):
                 # Borrar registros nómina del periodo
                 cur.execute("DELETE FROM RegistrosNomina WHERE IdPeriodo = ?", (id_periodo,))
                 # Borrar el periodo
-                cur.execute("DELETE FROM PeriodosNomina WHERE IdPeriodo = ?", (id_periodo,))
+                cur.execute("DELETE FROM Periodos WHERE IdPeriodo = ?", (id_periodo,))
             conn.commit()
         flash("Periodo eliminado.", "success")
     except Exception as e:
@@ -1841,7 +1848,7 @@ def empleados_eliminar(id_empleado: int):
                     """
                     DELETE i
                     FROM ItemsNomina i
-                    JOIN RegistrosNomina rn ON rn.IdNomina = i.IdNomina
+                    JOIN RegistrosNomina rn ON rn.IdRegistroNomina = i.IdRegistroNomina
                     WHERE rn.IdEmpleado = ?
                     """,
                     (id_empleado,),
@@ -2601,13 +2608,13 @@ def generar_comprobante_pdf(id_nomina: int):
             # Datos del empleado y periodo
             cur.execute("""
                 SELECT 
-                    e.IdEmpleado, e.CodigoEmpleado, e.Nombres, e.Apellidos, e.DocumentoIdentidad, e.NumeroIGSS,
-                    p.IdPeriodo, p.FechaInicio, p.FechaFin, p.TipoPeriodo,
-                    rn.SalarioBase, rn.TotalPrestaciones, rn.TotalDeducciones, rn.SalarioNeto
+                    e.IdEmpleado, e.CodigoEmpleado, e.Nombres, e.Apellidos, e.DPI, e.NIT,
+                    p.IdPeriodo, p.FechaInicio, p.FechaFin, p.Modalidad,
+                    rn.SalarioBase, rn.TotalPercepciones, rn.TotalDeducciones, rn.SalarioNeto
                 FROM RegistrosNomina rn
                 JOIN Empleados e ON e.IdEmpleado = rn.IdEmpleado
-                JOIN PeriodosNomina p ON p.IdPeriodo = rn.IdPeriodo
-                WHERE rn.IdNomina = ?
+                JOIN Periodos p ON p.IdPeriodo = rn.IdPeriodo
+                WHERE rn.IdRegistroNomina = ?
             """, (id_nomina,))
             row = cur.fetchone()
             if not row:
@@ -2630,7 +2637,7 @@ def generar_comprobante_pdf(id_nomina: int):
                 SELECT b.Nombre, i.TipoItem, i.Monto
                 FROM ItemsNomina i
                 JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
-                WHERE i.IdNomina = ?
+                WHERE i.IdRegistroNomina = ?
                 ORDER BY i.TipoItem DESC, b.Nombre
             """, (id_nomina,))
             items = cur.fetchall()
@@ -2727,16 +2734,16 @@ def generar_comprobante_html(id_nomina: int):
             # Datos del empleado y periodo
             cur.execute("""
                 SELECT 
-                    e.IdEmpleado, e.CodigoEmpleado, e.Nombres, e.Apellidos, e.DocumentoIdentidad, e.NumeroIGSS,
-                    p.IdPeriodo, p.FechaInicio, p.FechaFin, p.TipoPeriodo,
-                    rn.SalarioBase, rn.TotalPrestaciones, rn.TotalDeducciones, rn.SalarioNeto,
+                    e.IdEmpleado, e.CodigoEmpleado, e.Nombres, e.Apellidos, e.DPI, e.NIT,
+                    p.IdPeriodo, p.FechaInicio, p.FechaFin, p.Modalidad,
+                    rn.SalarioBase, rn.TotalPercepciones, rn.TotalDeducciones, rn.SalarioNeto,
                     pu.Titulo as Puesto, d.Nombre as Departamento
                 FROM RegistrosNomina rn
                 JOIN Empleados e ON e.IdEmpleado = rn.IdEmpleado
-                JOIN PeriodosNomina p ON p.IdPeriodo = rn.IdPeriodo
+                JOIN Periodos p ON p.IdPeriodo = rn.IdPeriodo
                 LEFT JOIN Puestos pu ON pu.IdPuesto = e.IdPuesto
                 LEFT JOIN Departamentos d ON d.IdDepartamento = pu.IdDepartamento
-                WHERE rn.IdNomina = ?
+                WHERE rn.IdRegistroNomina = ?
             """, (id_nomina,))
             row = cur.fetchone()
             if not row:
@@ -2759,7 +2766,7 @@ def generar_comprobante_html(id_nomina: int):
                 SELECT b.Nombre, i.TipoItem, i.Monto
                 FROM ItemsNomina i
                 JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
-                WHERE i.IdNomina = ?
+                WHERE i.IdRegistroNomina = ?
                 ORDER BY i.TipoItem DESC, b.Nombre
             """, (id_nomina,))
             items = cur.fetchall()
@@ -3008,20 +3015,20 @@ def comprobantes_listado():
                 
                 # Periodos
                 cur.execute("""
-                    SELECT IdPeriodo, FechaInicio, FechaFin, TipoPeriodo 
-                    FROM PeriodosNomina 
+                    SELECT IdPeriodo, FechaInicio, FechaFin, Modalidad 
+                    FROM Periodos 
                     ORDER BY FechaInicio DESC
                 """)
                 periodos = cur.fetchall()
                 
                 # Comprobantes (registros de nómina)
                 query = """
-                    SELECT rn.IdNomina, e.IdEmpleado, e.Nombres, e.Apellidos,
-                           p.IdPeriodo, p.FechaInicio, p.FechaFin, p.TipoPeriodo,
+                    SELECT rn.IdRegistroNomina, e.IdEmpleado, e.Nombres, e.Apellidos,
+                           p.IdPeriodo, p.FechaInicio, p.FechaFin, p.Modalidad,
                            rn.SalarioNeto
                     FROM RegistrosNomina rn
                     JOIN Empleados e ON e.IdEmpleado = rn.IdEmpleado
-                    JOIN PeriodosNomina p ON p.IdPeriodo = rn.IdPeriodo
+                    JOIN Periodos p ON p.IdPeriodo = rn.IdPeriodo
                     WHERE 1=1
                 """
                 params = []
