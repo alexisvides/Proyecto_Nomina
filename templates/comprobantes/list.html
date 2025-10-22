@@ -11,14 +11,26 @@
 
     <div style="margin-top:24px;">
       <form class="form" method="get" style="max-width:720px;">
+        <!-- Búsqueda por texto -->
+        <div class="form-group" style="margin-bottom:16px;">
+          <label for="busqueda">Buscar por código o nombre de empleado</label>
+          <input 
+            type="text" 
+            id="busqueda" 
+            name="busqueda" 
+            value="{{ busqueda or '' }}" 
+            placeholder="Ej: EMP001 o Juan Pérez..." 
+            style="width:100%; padding:12px 14px; border-radius:10px; background:#0b1328; color:var(--text); border:1px solid #1f2a44;">
+        </div>
+
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
           <div class="form-group">
-            <label for="empleado">Empleado</label>
+            <label for="empleado">Empleado (dropdown)</label>
             <select id="empleado" name="empleado" style="padding:12px 14px; border-radius:10px; background:#0b1328; color:var(--text); border:1px solid #1f2a44;">
               <option value="">Todos los empleados</option>
               {% for emp in empleados %}
                 <option value="{{ emp[0] }}" {% if filtro_empleado and filtro_empleado == emp[0]|string %}selected{% endif %}>
-                  {{ emp[1] }} {{ emp[2] }}
+                  {{ emp[3] }} - {{ emp[1] }} {{ emp[2] }}
                 </option>
               {% endfor %}
             </select>
@@ -44,7 +56,7 @@
             </svg>
             Buscar
           </button>
-          {% if filtro_empleado or filtro_periodo %}
+          {% if filtro_empleado or filtro_periodo or busqueda %}
           <a href="{{ url_for('comprobantes_listado') }}" class="btn btn-outline">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -73,10 +85,13 @@
             <tbody>
               {% for comp in comprobantes %}
               <tr style="border-bottom:1px solid #1f2a44;">
-                <td style="padding:10px 8px;">{{ comp[2] }} {{ comp[3] }}</td>
-                <td style="padding:10px 8px;">{{ comp[5] }} - {{ comp[6] }}</td>
-                <td style="padding:10px 8px; text-transform:capitalize;">{{ comp[7] }}</td>
-                <td style="padding:10px 8px;">Q {{ '%.2f'|format(comp[8]) }}</td>
+                <td style="padding:10px 8px;">
+                  <div>{{ comp[2] }} {{ comp[3] }}</div>
+                  <div style="color:#94a3b8; font-size:0.875rem;">{{ comp[4] }}</div>
+                </td>
+                <td style="padding:10px 8px;">{{ comp[6] }} - {{ comp[7] }}</td>
+                <td style="padding:10px 8px; text-transform:capitalize;">{{ comp[8] }}</td>
+                <td style="padding:10px 8px;">Q {{ '%.2f'|format(comp[9]) }}</td>
                 <td style="padding:10px 8px;">
                   <a href="{{ url_for('comprobante_pdf', id_nomina=comp[0]) }}" class="btn btn-outline" style="padding:8px 12px;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
@@ -92,7 +107,7 @@
         </div>
         {% else %}
         <p style="color:var(--muted);">
-          {% if filtro_empleado or filtro_periodo %}
+          {% if filtro_empleado or filtro_periodo or busqueda %}
             No se encontraron comprobantes con los filtros seleccionados.
           {% else %}
             Selecciona filtros y presiona "Buscar" para ver comprobantes disponibles.

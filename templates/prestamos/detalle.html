@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% block title %}Detalle de Préstamo{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px;">
+      <h2 class="card-title" style="margin:0;">Detalle del Préstamo #{{ prestamo[0] }}</h2>
+      <a class="btn btn-outline" href="{{ url_for('empleados_beneficios', id_empleado=prestamo[9]) }}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+          <polyline points="15 18 9 12 15 6"/><line x1="19" y1="12" x2="9" y2="12"/>
+        </svg>
+        Volver
+      </a>
+    </div>
+
+    <!-- Información del Empleado -->
+    <div style="background:#0f172a; border:1px solid #1f2a44; border-radius:12px; padding:16px; margin-bottom:24px;">
+      <h3 style="margin:0 0 12px 0; font-size:16px; color:#94a3b8;">Empleado</h3>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">
+        <div>
+          <p style="margin:0; color:#94a3b8; font-size:14px;">Nombre</p>
+          <p style="margin:4px 0 0 0; font-weight:600;">{{ prestamo[10] }} {{ prestamo[11] }}</p>
+        </div>
+        <div>
+          <p style="margin:0; color:#94a3b8; font-size:14px;">Código</p>
+          <p style="margin:4px 0 0 0; font-weight:600;">{{ prestamo[12] }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Información del Préstamo -->
+    <div style="background:#0f172a; border:1px solid #1f2a44; border-radius:12px; padding:16px; margin-bottom:24px;">
+      <h3 style="margin:0 0 12px 0; font-size:16px; color:#94a3b8;">Información del Préstamo</h3>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+        <div>
+          <p style="margin:0; color:#94a3b8; font-size:14px;">Monto Total</p>
+          <p style="margin:4px 0 0 0; font-weight:700; font-size:20px; color:#6366f1;">Q {{ '%.2f'|format(prestamo[1]) }}</p>
+        </div>
+        <div>
+          <p style="margin:0; color:#94a3b8; font-size:14px;">Monto Pendiente</p>
+          <p style="margin:4px 0 0 0; font-weight:700; font-size:20px; {% if prestamo[2] == 0 %}color:#10b981{% elif prestamo[2] < prestamo[1] * 0.3 %}color:#f59e0b{% else %}color:#ef4444{% endif %}">
+            Q {{ '%.2f'|format(prestamo[2]) }}
+          </p>
+        </div>
+        <div>
+          <p style="margin:0; color:#94a3b8; font-size:14px;">Monto Pagado</p>
+          <p style="margin:4px 0 0 0; font-weight:700; font-size:20px; color:#10b981;">Q {{ '%.2f'|format(prestamo[1] - prestamo[2]) }}</p>
+        </div>
+        <div>
+          <p style="margin:0; color:#94a3b8; font-size:14px;">Progreso</p>
+          <div style="margin:8px 0 0 0;">
+            <div style="width:100%; height:8px; background:#1f2a44; border-radius:4px; overflow:hidden;">
+              <div style="width:{{ ((prestamo[1] - prestamo[2]) / prestamo[1] * 100)|round(2) }}%; height:100%; background:linear-gradient(90deg, #10b981, #059669); transition:width 0.3s;"></div>
+            </div>
+            <p style="margin:4px 0 0 0; font-size:14px; color:#94a3b8;">{{ ((prestamo[1] - prestamo[2]) / prestamo[1] * 100)|round(2) }}% pagado</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-top:16px; padding-top:16px; border-top:1px solid #1f2a44;">
+        <div>
+          <p style="margin:0; color:#94a3b8; font-size:14px;">Descuento por Período</p>
+          <p style="margin:4px 0 0 0; font-weight:600;">
+            {% if prestamo[3] == 'fijo' %}
+              Q {{ '%.2f'|format(prestamo[4]) }} (Monto Fijo)
+            {% else %}
+              {{ '%.2f'|format(prestamo[4]) }}% del salario
+            {% endif %}
+          </p>
+        </div>
+        <div>
+          <p style="margin:0; color:#94a3b8; font-size:14px;">Fecha de Inicio</p>
+          <p style="margin:4px 0 0 0; font-weight:600;">{{ prestamo[5].strftime('%d/%m/%Y') }}</p>
+        </div>
+        <div>
+          <p style="margin:0; color:#94a3b8; font-size:14px;">Estado</p>
+          <p style="margin:4px 0 0 0;">
+            <span class="status-badge {% if prestamo[7] == 'pagado' %}status-active{% elif prestamo[7] == 'activo' %}{% else %}status-inactive{% endif %}">
+              {{ prestamo[7]|capitalize }}
+            </span>
+          </p>
+        </div>
+        {% if prestamo[6] %}
+        <div>
+          <p style="margin:0; color:#94a3b8; font-size:14px;">Fecha de Fin</p>
+          <p style="margin:4px 0 0 0; font-weight:600;">{{ prestamo[6].strftime('%d/%m/%Y') }}</p>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if prestamo[8] %}
+      <div style="margin-top:16px; padding-top:16px; border-top:1px solid #1f2a44;">
+        <p style="margin:0; color:#94a3b8; font-size:14px;">Descripción</p>
+        <p style="margin:4px 0 0 0;">{{ prestamo[8] }}</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Historial de Pagos -->
+    <div>
+      <h3 class="card-title" style="margin:0 0 16px 0;">📋 Historial de Pagos</h3>
+      
+      {% if pagos %}
+      <div style="overflow:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr style="text-align:left; border-bottom:1px solid #1f2a44; color:var(--muted);">
+              <th style="padding:10px 8px;">#</th>
+              <th style="padding:10px 8px;">Monto Pagado</th>
+              <th style="padding:10px 8px;">Periodo</th>
+              <th style="padding:10px 8px;">Tipo</th>
+              <th style="padding:10px 8px;">Fecha de Pago</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for pago in pagos %}
+            <tr style="border-bottom:1px solid #1f2a44;">
+              <td style="padding:10px 8px; color:#94a3b8;">{{ loop.index }}</td>
+              <td style="padding:10px 8px; font-weight:600; color:#10b981;">Q {{ '%.2f'|format(pago[1]) }}</td>
+              <td style="padding:10px 8px;">{{ pago[4].strftime('%d/%m/%Y') }} - {{ pago[5].strftime('%d/%m/%Y') }}</td>
+              <td style="padding:10px 8px; text-transform:capitalize;">{{ pago[6] }}</td>
+              <td style="padding:10px 8px;">{{ pago[2].strftime('%d/%m/%Y %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr style="border-top:2px solid #1f2a44; font-weight:700;">
+              <td style="padding:12px 8px;" colspan="1">Total Pagado:</td>
+              <td style="padding:12px 8px; color:#10b981;">Q {{ '%.2f'|format(pagos|sum(attribute=1)) }}</td>
+              <td style="padding:12px 8px;" colspan="3">{{ pagos|length }} pago(s) realizado(s)</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align:center; padding:32px; background:#0f172a; border:1px solid #1f2a44; border-radius:12px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#475569; margin-bottom:12px;">
+          <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+        <p style="color:#94a3b8; margin:0;">No se han realizado pagos todavía.</p>
+        <p style="color:#64748b; margin:8px 0 0 0; font-size:14px;">Los descuentos se aplicarán automáticamente al generar nómina.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

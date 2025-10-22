@@ -941,7 +941,450 @@ def periodos_recalcular(id_periodo: int):
 @app.route("/reportes")
 @requiere_permiso_modulo("Reportes")
 def reportes_listado():
-    return render_template("reportes/list.html")
+    """Lista de reportes disponibles."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Cargar periodos para el selector
+                cur.execute("""
+                    SELECT IdPeriodo, FechaInicio, FechaFin, TipoPeriodo
+                    FROM PeriodosNomina
+                    ORDER BY FechaInicio DESC
+                """)
+                periodos = cur.fetchall()
+        return render_template("reportes/list.html", periodos=periodos)
+    except Exception as e:
+        flash(f"Error cargando reportes: {e}", "danger")
+        return render_template("reportes/list.html", periodos=[])
+
+
+@app.route("/reportes/empleados/pdf")
+@requiere_permiso_modulo("Reportes")
+def reporte_empleados_pdf():
+    """Genera reporte PDF de empleados."""
+    try:
+        from reportlab.lib.pagesizes import letter, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from datetime import datetime
+        
+        # Obtener datos
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT e.CodigoEmpleado, e.Nombres, e.Apellidos, 
+                           p.Titulo, e.SalarioBase,
+                           CONVERT(VARCHAR(10), e.FechaContratacion, 103) as FechaInicio,
+                           CASE WHEN e.FechaFin IS NULL THEN 'Activo' 
+                                ELSE CONVERT(VARCHAR(10), e.FechaFin, 103) END as Estado
+                    FROM Empleados e
+                    LEFT JOIN Puestos p ON p.IdPuesto = e.IdPuesto
+                    ORDER BY e.Apellidos, e.Nombres
+                """)
+                empleados = cur.fetchall()
+        
+        # Crear PDF en memoria
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
+                                rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=30)
+        
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Título
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#1e40af'),
+            spaceAfter=6,
+            alignment=TA_CENTER
+        )
+        elements.append(Paragraph("REPORTE DE EMPLEADOS", title_style))
+        
+        # Fecha de generación
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], 
+                                       fontSize=10, textColor=colors.grey, alignment=TA_CENTER)
+        elements.append(Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
+        elements.append(Spacer(1, 20))
+        
+        # Tabla de datos
+        data = [['Código', 'Nombre Completo', 'Puesto', 'Salario Base', 'Fecha Inicio', 'Estado']]
+        
+        for emp in empleados:
+            data.append([
+                emp[0],  # Código
+                f"{emp[1]} {emp[2]}",  # Nombre completo
+                emp[3] or 'N/A',  # Puesto
+                f"Q {emp[4]:,.2f}",  # Salario
+                emp[5],  # Fecha inicio
+                emp[6]   # Estado
+            ])
+        
+        # Crear tabla
+        table = Table(data, colWidths=[0.8*inch, 2.2*inch, 1.8*inch, 1.2*inch, 1.2*inch, 1*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e40af')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (3, 0), (3, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
+        ]))
+        
+        elements.append(table)
+        elements.append(Spacer(1, 20))
+        elements.append(Paragraph(f"<b>Total de empleados:</b> {len(empleados)}", styles['Normal']))
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        registrar_auditoria("Reporte de empleados generado", "Reportes", "PDF")
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename="reporte_empleados_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"'}
+        )
+    except Exception as e:
+        flash(f"Error generando reporte: {e}", "danger")
+        return redirect(url_for("reportes_listado"))
+
+
+@app.route("/reportes/nomina/periodo/pdf")
+@requiere_permiso_modulo("Reportes")
+def reporte_nomina_periodo_pdf():
+    """Genera reporte PDF de nómina por periodo."""
+    id_periodo = request.args.get("id_periodo")
+    
+    if not id_periodo:
+        flash("Debe seleccionar un periodo.", "warning")
+        return redirect(url_for("reportes_listado"))
+    
+    try:
+        from reportlab.lib.pagesizes import letter, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
+        from datetime import datetime
+        
+        # Obtener datos del periodo y nómina
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Info del periodo
+                cur.execute("""
+                    SELECT FechaInicio, FechaFin, TipoPeriodo
+                    FROM PeriodosNomina
+                    WHERE IdPeriodo = ?
+                """, (id_periodo,))
+                periodo = cur.fetchone()
+                
+                if not periodo:
+                    flash("Periodo no encontrado.", "warning")
+                    return redirect(url_for("reportes_listado"))
+                
+                # Detalle de nómina
+                cur.execute("""
+                    SELECT e.CodigoEmpleado, e.Nombres, e.Apellidos,
+                           rn.SalarioBase,
+                           ISNULL((SELECT SUM(i.Monto) FROM ItemsNomina i 
+                                   JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
+                                   WHERE i.IdNomina = rn.IdNomina AND b.Tipo = 'prestacion'), 0) as Prestaciones,
+                           ISNULL((SELECT SUM(i.Monto) FROM ItemsNomina i 
+                                   JOIN BeneficiosDeducciones b ON b.IdBeneficioDeduccion = i.IdBeneficioDeduccion
+                                   WHERE i.IdNomina = rn.IdNomina AND b.Tipo = 'deduccion'), 0) as Deducciones,
+                           rn.SalarioNeto
+                    FROM RegistrosNomina rn
+                    JOIN Empleados e ON e.IdEmpleado = rn.IdEmpleado
+                    WHERE rn.IdPeriodo = ?
+                    ORDER BY e.Apellidos, e.Nombres
+                """, (id_periodo,))
+                nominas = cur.fetchall()
+        
+        # Crear PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter),
+                                rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=30)
+        
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Título
+        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'],
+                                     fontSize=18, textColor=colors.HexColor('#059669'),
+                                     spaceAfter=6, alignment=TA_CENTER)
+        elements.append(Paragraph("REPORTE DE NÓMINA POR PERIODO", title_style))
+        
+        # Info del periodo
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'],
+                                       fontSize=10, textColor=colors.grey, alignment=TA_CENTER)
+        elements.append(Paragraph(
+            f"Periodo: {periodo[0].strftime('%d/%m/%Y')} - {periodo[1].strftime('%d/%m/%Y')} ({periodo[2]})",
+            subtitle_style
+        ))
+        elements.append(Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
+        elements.append(Spacer(1, 20))
+        
+        # Tabla
+        data = [['Código', 'Empleado', 'Salario Base', 'Prestaciones', 'Deducciones', 'Salario Neto']]
+        
+        total_base = 0
+        total_prest = 0
+        total_ded = 0
+        total_neto = 0
+        
+        for nom in nominas:
+            data.append([
+                nom[0],
+                f"{nom[1]} {nom[2]}",
+                f"Q {nom[3]:,.2f}",
+                f"Q {nom[4]:,.2f}",
+                f"Q {nom[5]:,.2f}",
+                f"Q {nom[6]:,.2f}"
+            ])
+            total_base += nom[3]
+            total_prest += nom[4]
+            total_ded += nom[5]
+            total_neto += nom[6]
+        
+        # Fila de totales
+        data.append(['', 'TOTALES', f"Q {total_base:,.2f}", f"Q {total_prest:,.2f}",
+                     f"Q {total_ded:,.2f}", f"Q {total_neto:,.2f}"])
+        
+        table = Table(data, colWidths=[0.9*inch, 2.5*inch, 1.3*inch, 1.3*inch, 1.3*inch, 1.3*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#059669')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8f9fa')]),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#d1fae5')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold')
+        ]))
+        
+        elements.append(table)
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        registrar_auditoria("Reporte de nómina generado", "Reportes", f"Periodo: {id_periodo}")
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename="reporte_nomina_{id_periodo}_{datetime.now().strftime("%Y%m%d")}.pdf"'}
+        )
+    except Exception as e:
+        flash(f"Error generando reporte: {e}", "danger")
+        return redirect(url_for("reportes_listado"))
+
+
+@app.route("/reportes/asistencia/pdf")
+@requiere_permiso_modulo("Reportes")
+def reporte_asistencia_pdf():
+    """Genera reporte PDF de asistencia."""
+    try:
+        from reportlab.lib.pagesizes import letter, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
+        from datetime import datetime
+        
+        # Obtener datos (últimos 500 registros)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT TOP 500
+                           e.CodigoEmpleado, e.Nombres, e.Apellidos,
+                           CONVERT(VARCHAR(10), a.FechaHora, 103) as Fecha,
+                           CONVERT(VARCHAR(5), a.FechaHora, 108) as Hora,
+                           a.Tipo,
+                           ISNULL(a.Observacion, '') as Obs
+                    FROM Asistencias a
+                    JOIN Empleados e ON e.IdEmpleado = a.IdEmpleado
+                    ORDER BY a.FechaHora DESC
+                """)
+                asistencias = cur.fetchall()
+        
+        # Crear PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter),
+                                rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=30)
+        
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Título
+        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'],
+                                     fontSize=18, textColor=colors.HexColor('#7c3aed'),
+                                     spaceAfter=6, alignment=TA_CENTER)
+        elements.append(Paragraph("REPORTE DE ASISTENCIA", title_style))
+        
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'],
+                                       fontSize=10, textColor=colors.grey, alignment=TA_CENTER)
+        elements.append(Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
+        elements.append(Paragraph(f"Últimos {len(asistencias)} registros", subtitle_style))
+        elements.append(Spacer(1, 20))
+        
+        # Tabla
+        data = [['Código', 'Empleado', 'Fecha', 'Hora', 'Tipo', 'Observación']]
+        
+        for asist in asistencias:
+            data.append([
+                asist[0],
+                f"{asist[1]} {asist[2]}",
+                asist[3],
+                asist[4],
+                asist[5].capitalize(),
+                asist[6][:30] if len(asist[6]) > 30 else asist[6]
+            ])
+        
+        table = Table(data, colWidths=[0.8*inch, 2.2*inch, 1*inch, 0.8*inch, 0.9*inch, 2.5*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (2, 0), (4, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
+        ]))
+        
+        elements.append(table)
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        registrar_auditoria("Reporte de asistencia generado", "Reportes", "PDF")
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename="reporte_asistencia_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"'}
+        )
+    except Exception as e:
+        flash(f"Error generando reporte: {e}", "danger")
+        return redirect(url_for("reportes_listado"))
+
+
+@app.route("/reportes/usuarios/pdf")
+@requiere_permiso_modulo("Reportes")
+def reporte_usuarios_pdf():
+    """Genera reporte PDF de usuarios activos."""
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
+        from datetime import datetime
+        
+        # Obtener datos
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT u.NombreUsuario, r.Nombre as NombreRol,
+                           ISNULL(e.Nombres + ' ' + e.Apellidos, 'N/A') as Empleado,
+                           CASE WHEN u.Activo = 1 THEN 'Activo' ELSE 'Inactivo' END as Estado,
+                           CONVERT(VARCHAR(10), u.FechaCreacion, 103) as FechaCreacion
+                    FROM Usuarios u
+                    LEFT JOIN Roles r ON r.IdRol = u.IdRol
+                    LEFT JOIN Empleados e ON e.IdEmpleado = u.IdEmpleado
+                    WHERE u.Activo = 1
+                    ORDER BY u.NombreUsuario
+                """)
+                usuarios = cur.fetchall()
+        
+        # Crear PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter,
+                                rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=30)
+        
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Título
+        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'],
+                                     fontSize=18, textColor=colors.HexColor('#dc2626'),
+                                     spaceAfter=6, alignment=TA_CENTER)
+        elements.append(Paragraph("REPORTE DE USUARIOS ACTIVOS", title_style))
+        
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'],
+                                       fontSize=10, textColor=colors.grey, alignment=TA_CENTER)
+        elements.append(Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
+        elements.append(Spacer(1, 20))
+        
+        # Tabla
+        data = [['Usuario', 'Rol', 'Empleado Asociado', 'Estado', 'Fecha Creación']]
+        
+        for usr in usuarios:
+            data.append([
+                usr[0],
+                usr[1] or 'N/A',
+                usr[2],
+                usr[3],
+                usr[4]
+            ])
+        
+        table = Table(data, colWidths=[1.5*inch, 1.3*inch, 2*inch, 1*inch, 1.2*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#dc2626')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (3, 0), (3, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
+        ]))
+        
+        elements.append(table)
+        elements.append(Spacer(1, 20))
+        elements.append(Paragraph(f"<b>Total de usuarios activos:</b> {len(usuarios)}", styles['Normal']))
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        registrar_auditoria("Reporte de usuarios generado", "Reportes", "PDF")
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename="reporte_usuarios_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"'}
+        )
+    except Exception as e:
+        flash(f"Error generando reporte: {e}", "danger")
+        return redirect(url_for("reportes_listado"))
 
 
 @app.route("/nomina/periodos/<int:id_periodo>/generar", methods=["POST"])
@@ -1074,6 +1517,97 @@ def generar_nomina(id_periodo: int):
                     """,
                     (id_periodo,)
                 )
+                
+                # Procesar descuentos de préstamos activos
+                try:
+                    # Obtener préstamos activos con empleados que tienen nómina en este periodo
+                    cur.execute(
+                        """
+                        SELECT p.IdPrestamo, p.IdEmpleado, p.TipoDescuento, p.ValorDescuento, 
+                               p.MontoPendiente, rn.IdNomina, rn.SalarioBase
+                        FROM Prestamos p
+                        JOIN RegistrosNomina rn ON rn.IdEmpleado = p.IdEmpleado
+                        WHERE p.Estado = 'activo'
+                          AND p.MontoPendiente > 0
+                          AND rn.IdPeriodo = ?
+                        """,
+                        (id_periodo,)
+                    )
+                    prestamos_activos = cur.fetchall()
+                    
+                    # Buscar o crear el beneficio/deducción "Préstamo"
+                    cur.execute("SELECT IdBeneficioDeduccion FROM BeneficiosDeducciones WHERE Nombre = 'Préstamo'")
+                    concepto_prestamo = cur.fetchone()
+                    
+                    if not concepto_prestamo:
+                        cur.execute(
+                            """
+                            INSERT INTO BeneficiosDeducciones (Nombre, Tipo, TipoCalculo, Valor, Activo, Descripcion)
+                            VALUES ('Préstamo', 'deduccion', 'fijo', 0, 1, 'Descuento por préstamo a empleado')
+                            """
+                        )
+                        cur.execute("SELECT IdBeneficioDeduccion FROM BeneficiosDeducciones WHERE Nombre = 'Préstamo'")
+                        concepto_prestamo = cur.fetchone()
+                    
+                    id_concepto_prestamo = concepto_prestamo[0]
+                    
+                    # Procesar cada préstamo
+                    for prestamo in prestamos_activos:
+                        id_prestamo = prestamo[0]
+                        id_empleado = prestamo[1]
+                        tipo_descuento = prestamo[2]
+                        valor_descuento = prestamo[3]
+                        monto_pendiente = prestamo[4]
+                        id_nomina = prestamo[5]
+                        salario_base = prestamo[6]
+                        
+                        # Calcular monto a descontar
+                        if tipo_descuento == 'fijo':
+                            monto_descuento = min(valor_descuento, monto_pendiente)
+                        else:  # porcentaje
+                            monto_descuento = round(salario_base * valor_descuento / 100, 2)
+                            monto_descuento = min(monto_descuento, monto_pendiente)
+                        
+                        # No descontar si el monto es 0
+                        if monto_descuento <= 0:
+                            continue
+                        
+                        # Insertar el item de nómina
+                        cur.execute(
+                            """
+                            INSERT INTO ItemsNomina (IdNomina, IdBeneficioDeduccion, TipoItem, Monto, Descripcion)
+                            VALUES (?, ?, 'deduccion', ?, ?)
+                            """,
+                            (id_nomina, id_concepto_prestamo, monto_descuento, f'Préstamo #{id_prestamo}')
+                        )
+                        
+                        # Registrar el pago
+                        cur.execute(
+                            """
+                            INSERT INTO PrestamoPagos (IdPrestamo, IdPeriodo, IdNomina, MontoPagado)
+                            VALUES (?, ?, ?, ?)
+                            """,
+                            (id_prestamo, id_periodo, id_nomina, monto_descuento)
+                        )
+                        
+                        # Actualizar el monto pendiente del préstamo
+                        nuevo_pendiente = monto_pendiente - monto_descuento
+                        cur.execute(
+                            "UPDATE Prestamos SET MontoPendiente = ? WHERE IdPrestamo = ?",
+                            (nuevo_pendiente, id_prestamo)
+                        )
+                        
+                        # Si el préstamo está completamente pagado, marcar como pagado
+                        if nuevo_pendiente <= 0:
+                            cur.execute(
+                                "UPDATE Prestamos SET Estado = 'pagado', FechaFin = GETDATE() WHERE IdPrestamo = ?",
+                                (id_prestamo,)
+                            )
+                
+                except Exception as e_prestamo:
+                    # Si hay error con préstamos, continuar con el resto
+                    print(f"Error procesando préstamos: {e_prestamo}")
+                
                 conn.commit()
         flash("Registros de nómina generados para el periodo.", "success")
     except Exception as e:
@@ -1441,23 +1975,44 @@ def asistencia_listado():
         Observacion VARCHAR(255) NULL
     );
     """
+    # Obtener filtros
+    busqueda = request.args.get("busqueda", "").strip()
+    
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT TOP 100 a.IdAsistencia, a.FechaHora, a.Tipo, a.Observacion,
-                           e.IdEmpleado, e.Nombres, e.Apellidos
-                    FROM Asistencias a
-                    JOIN Empleados e ON e.IdEmpleado = a.IdEmpleado
-                    ORDER BY a.FechaHora DESC
-                    """
-                )
+                if busqueda:
+                    # Filtrar por código o nombre
+                    cur.execute(
+                        """
+                        SELECT TOP 100 a.IdAsistencia, a.FechaHora, a.Tipo, a.Observacion,
+                               e.IdEmpleado, e.Nombres, e.Apellidos, e.CodigoEmpleado
+                        FROM Asistencias a
+                        JOIN Empleados e ON e.IdEmpleado = a.IdEmpleado
+                        WHERE e.CodigoEmpleado LIKE ?
+                           OR e.Nombres LIKE ?
+                           OR e.Apellidos LIKE ?
+                           OR (e.Nombres + ' ' + e.Apellidos) LIKE ?
+                        ORDER BY a.FechaHora DESC
+                        """,
+                        (f"%{busqueda}%", f"%{busqueda}%", f"%{busqueda}%", f"%{busqueda}%")
+                    )
+                else:
+                    # Sin filtro, mostrar todos
+                    cur.execute(
+                        """
+                        SELECT TOP 100 a.IdAsistencia, a.FechaHora, a.Tipo, a.Observacion,
+                               e.IdEmpleado, e.Nombres, e.Apellidos, e.CodigoEmpleado
+                        FROM Asistencias a
+                        JOIN Empleados e ON e.IdEmpleado = a.IdEmpleado
+                        ORDER BY a.FechaHora DESC
+                        """
+                    )
                 rows = cur.fetchall()
-        return render_template("asistencia/list.html", items=rows, tabla_ok=True)
+        return render_template("asistencia/list.html", items=rows, tabla_ok=True, busqueda=busqueda)
     except Exception as e:
         flash(f"No se pudo consultar asistencias: {e}", "warning")
-        return render_template("asistencia/list.html", items=[], tabla_ok=False)
+        return render_template("asistencia/list.html", items=[], tabla_ok=False, busqueda=busqueda)
 
 
 @app.route("/asistencia/nuevo", methods=["GET", "POST"])
@@ -1515,25 +2070,48 @@ def asistencia_nuevo():
 @app.route("/empleados")
 @requiere_permiso_modulo("Empleados")
 def empleados_listado():
+    # Obtener filtros
+    busqueda = request.args.get("busqueda", "").strip()
+    
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT IdEmpleado, CodigoEmpleado, Nombres, Apellidos, 
-                           CONVERT(varchar(10), FechaContratacion, 23) as FechaInicio,
-                           CONVERT(varchar(10), FechaFin, 23) as FechaFin,
-                           SalarioBase, DocumentoIdentidad, NumeroIGSS,
-                           CONVERT(varchar(10), FechaNacimiento, 23) as FechaNacimiento
-                    FROM Empleados
-                    ORDER BY Apellidos, Nombres
-                    """
-                )
+                if busqueda:
+                    # Filtrar por código o nombre
+                    cur.execute(
+                        """
+                        SELECT IdEmpleado, CodigoEmpleado, Nombres, Apellidos, 
+                               CONVERT(varchar(10), FechaContratacion, 23) as FechaInicio,
+                               CONVERT(varchar(10), FechaFin, 23) as FechaFin,
+                               SalarioBase, DocumentoIdentidad, NumeroIGSS,
+                               CONVERT(varchar(10), FechaNacimiento, 23) as FechaNacimiento
+                        FROM Empleados
+                        WHERE CodigoEmpleado LIKE ? 
+                           OR Nombres LIKE ?
+                           OR Apellidos LIKE ?
+                           OR (Nombres + ' ' + Apellidos) LIKE ?
+                        ORDER BY Apellidos, Nombres
+                        """,
+                        (f"%{busqueda}%", f"%{busqueda}%", f"%{busqueda}%", f"%{busqueda}%")
+                    )
+                else:
+                    # Sin filtro, mostrar todos
+                    cur.execute(
+                        """
+                        SELECT IdEmpleado, CodigoEmpleado, Nombres, Apellidos, 
+                               CONVERT(varchar(10), FechaContratacion, 23) as FechaInicio,
+                               CONVERT(varchar(10), FechaFin, 23) as FechaFin,
+                               SalarioBase, DocumentoIdentidad, NumeroIGSS,
+                               CONVERT(varchar(10), FechaNacimiento, 23) as FechaNacimiento
+                        FROM Empleados
+                        ORDER BY Apellidos, Nombres
+                        """
+                    )
                 empleados = cur.fetchall()
-        return render_template("empleados/list.html", empleados=empleados)
+        return render_template("empleados/list.html", empleados=empleados, busqueda=busqueda)
     except Exception as e:
         flash(f"Error cargando empleados: {e}", "danger")
-        return render_template("empleados/list.html", empleados=[])
+        return render_template("empleados/list.html", empleados=[], busqueda=busqueda)
 
 
 @app.route("/empleados/nuevo", methods=["GET", "POST"])
@@ -1804,7 +2382,7 @@ def empleados_beneficios(id_empleado: int):
             flash(f"No se pudo guardar: {e}", "danger")
         return redirect(url_for("empleados_beneficios", id_empleado=id_empleado))
 
-    # GET: listar catálogo con overrides del empleado
+    # GET: listar catálogo con overrides del empleado y préstamos
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -1822,10 +2400,29 @@ def empleados_beneficios(id_empleado: int):
                 # info empleado
                 cur.execute("SELECT IdEmpleado, Nombres, Apellidos FROM Empleados WHERE IdEmpleado = ?", (id_empleado,))
                 emp = cur.fetchone()
+                
+                # Obtener préstamos del empleado
+                prestamos = []
+                try:
+                    cur.execute(
+                        """
+                        SELECT IdPrestamo, MontoTotal, MontoPendiente, TipoDescuento, 
+                               ValorDescuento, FechaInicio, FechaFin, Estado, Descripcion
+                        FROM Prestamos
+                        WHERE IdEmpleado = ?
+                        ORDER BY FechaCreacion DESC
+                        """,
+                        (id_empleado,)
+                    )
+                    prestamos = cur.fetchall()
+                except Exception:
+                    # Si la tabla no existe, continuar sin préstamos
+                    pass
+                
         if not emp:
             flash("Empleado no encontrado.", "warning")
             return redirect(url_for("empleados_listado"))
-        return render_template("empleados/beneficios.html", filas=filas, emp=emp)
+        return render_template("empleados/beneficios.html", filas=filas, emp=emp, prestamos=prestamos)
     except Exception as e:
         flash(f"Error cargando beneficios del empleado: {e}", "danger")
         return redirect(url_for("empleados_listado"))
@@ -1855,6 +2452,139 @@ def empleados_eliminar(id_empleado: int):
     except Exception as e:
         flash(f"No se pudo eliminar el empleado: {e}", "danger")
     return redirect(url_for("empleados_listado"))
+
+
+# =============================
+# Préstamos a Empleados
+# =============================
+@app.route("/empleados/<int:id_empleado>/prestamos/crear", methods=["POST"])
+@requiere_permiso_modulo("Empleados")
+def crear_prestamo(id_empleado: int):
+    """Crea un nuevo préstamo para un empleado."""
+    try:
+        monto_total = float(request.form.get("monto_total", 0))
+        tipo_descuento = request.form.get("tipo_descuento")
+        valor_descuento = float(request.form.get("valor_descuento", 0))
+        descripcion = request.form.get("descripcion", "").strip()
+        
+        # Validaciones
+        if monto_total <= 0:
+            flash("El monto total debe ser mayor a 0.", "warning")
+            return redirect(url_for("empleados_beneficios", id_empleado=id_empleado))
+        
+        if tipo_descuento not in ['fijo', 'porcentaje']:
+            flash("Tipo de descuento inválido.", "warning")
+            return redirect(url_for("empleados_beneficios", id_empleado=id_empleado))
+        
+        if valor_descuento <= 0:
+            flash("El valor de descuento debe ser mayor a 0.", "warning")
+            return redirect(url_for("empleados_beneficios", id_empleado=id_empleado))
+        
+        if tipo_descuento == 'porcentaje' and valor_descuento > 100:
+            flash("El porcentaje no puede ser mayor a 100%.", "warning")
+            return redirect(url_for("empleados_beneficios", id_empleado=id_empleado))
+        
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO Prestamos (IdEmpleado, MontoTotal, MontoPendiente, TipoDescuento, 
+                                          ValorDescuento, Descripcion, UsuarioCreacion)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (id_empleado, monto_total, monto_total, tipo_descuento, valor_descuento, 
+                     descripcion if descripcion else None, session.get("user_id"))
+                )
+                conn.commit()
+        
+        registrar_auditoria("Préstamo creado", "Empleados", f"IdEmpleado: {id_empleado}, Monto: {monto_total}")
+        flash(f"Préstamo de Q {monto_total:.2f} creado exitosamente.", "success")
+    except Exception as e:
+        flash(f"Error al crear préstamo: {e}", "danger")
+    
+    return redirect(url_for("empleados_beneficios", id_empleado=id_empleado))
+
+
+@app.route("/prestamos/<int:id_prestamo>/cancelar", methods=["POST"])
+@requiere_permiso_modulo("Empleados")
+def cancelar_prestamo(id_prestamo: int):
+    """Cancela un préstamo activo."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Verificar que el préstamo existe y está activo
+                cur.execute("SELECT IdEmpleado, Estado FROM Prestamos WHERE IdPrestamo = ?", (id_prestamo,))
+                row = cur.fetchone()
+                
+                if not row:
+                    flash("Préstamo no encontrado.", "warning")
+                    return redirect(url_for("empleados_listado"))
+                
+                id_empleado = row[0]
+                estado = row[1]
+                
+                if estado != 'activo':
+                    flash("Solo se pueden cancelar préstamos activos.", "warning")
+                    return redirect(url_for("empleados_beneficios", id_empleado=id_empleado))
+                
+                # Cancelar el préstamo
+                cur.execute(
+                    "UPDATE Prestamos SET Estado = 'cancelado', FechaFin = GETDATE() WHERE IdPrestamo = ?",
+                    (id_prestamo,)
+                )
+                conn.commit()
+        
+        registrar_auditoria("Préstamo cancelado", "Empleados", f"IdPrestamo: {id_prestamo}")
+        flash("Préstamo cancelado exitosamente.", "success")
+        return redirect(url_for("empleados_beneficios", id_empleado=id_empleado))
+    except Exception as e:
+        flash(f"Error al cancelar préstamo: {e}", "danger")
+        return redirect(url_for("empleados_listado"))
+
+
+@app.route("/prestamos/<int:id_prestamo>/detalle")
+@requiere_permiso_modulo("Empleados")
+def detalle_prestamo(id_prestamo: int):
+    """Muestra el detalle de un préstamo y sus pagos."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Obtener información del préstamo
+                cur.execute(
+                    """
+                    SELECT p.IdPrestamo, p.MontoTotal, p.MontoPendiente, p.TipoDescuento,
+                           p.ValorDescuento, p.FechaInicio, p.FechaFin, p.Estado, p.Descripcion,
+                           e.IdEmpleado, e.Nombres, e.Apellidos, e.CodigoEmpleado
+                    FROM Prestamos p
+                    JOIN Empleados e ON e.IdEmpleado = p.IdEmpleado
+                    WHERE p.IdPrestamo = ?
+                    """,
+                    (id_prestamo,)
+                )
+                prestamo = cur.fetchone()
+                
+                if not prestamo:
+                    flash("Préstamo no encontrado.", "warning")
+                    return redirect(url_for("empleados_listado"))
+                
+                # Obtener historial de pagos
+                cur.execute(
+                    """
+                    SELECT pp.IdPago, pp.MontoPagado, pp.FechaPago,
+                           pn.IdPeriodo, pn.FechaInicio, pn.FechaFin, pn.TipoPeriodo
+                    FROM PrestamoPagos pp
+                    JOIN PeriodosNomina pn ON pn.IdPeriodo = pp.IdPeriodo
+                    WHERE pp.IdPrestamo = ?
+                    ORDER BY pp.FechaPago DESC
+                    """,
+                    (id_prestamo,)
+                )
+                pagos = cur.fetchall()
+        
+        return render_template("prestamos/detalle.html", prestamo=prestamo, pagos=pagos)
+    except Exception as e:
+        flash(f"Error cargando detalle del préstamo: {e}", "danger")
+        return redirect(url_for("empleados_listado"))
 
 
 @app.route("/nomina/registros/<int:id_nomina>/eliminar", methods=["POST"])
@@ -2993,6 +3723,7 @@ def comprobantes_listado():
     # Obtener filtros
     id_empleado = request.args.get("empleado")
     id_periodo = request.args.get("periodo")
+    busqueda = request.args.get("busqueda", "").strip()
     
     # Obtener lista de empleados y periodos para filtros
     empleados = []
@@ -3003,7 +3734,7 @@ def comprobantes_listado():
         with get_connection() as conn:
             with conn.cursor() as cur:
                 # Empleados
-                cur.execute("SELECT IdEmpleado, Nombres, Apellidos FROM Empleados ORDER BY Apellidos, Nombres")
+                cur.execute("SELECT IdEmpleado, Nombres, Apellidos, CodigoEmpleado FROM Empleados ORDER BY Apellidos, Nombres")
                 empleados = cur.fetchall()
                 
                 # Periodos
@@ -3016,7 +3747,7 @@ def comprobantes_listado():
                 
                 # Comprobantes (registros de nómina)
                 query = """
-                    SELECT rn.IdNomina, e.IdEmpleado, e.Nombres, e.Apellidos,
+                    SELECT rn.IdNomina, e.IdEmpleado, e.Nombres, e.Apellidos, e.CodigoEmpleado,
                            p.IdPeriodo, p.FechaInicio, p.FechaFin, p.TipoPeriodo,
                            rn.SalarioNeto
                     FROM RegistrosNomina rn
@@ -3034,6 +3765,13 @@ def comprobantes_listado():
                     query += " AND p.IdPeriodo = ?"
                     params.append(id_periodo)
                 
+                if busqueda:
+                    query += """ AND (e.CodigoEmpleado LIKE ? 
+                                   OR e.Nombres LIKE ? 
+                                   OR e.Apellidos LIKE ?
+                                   OR (e.Nombres + ' ' + e.Apellidos) LIKE ?)"""
+                    params.extend([f"%{busqueda}%", f"%{busqueda}%", f"%{busqueda}%", f"%{busqueda}%"])
+                
                 query += " ORDER BY p.FechaInicio DESC, e.Apellidos, e.Nombres"
                 
                 cur.execute(query, params)
@@ -3047,7 +3785,8 @@ def comprobantes_listado():
         periodos=periodos,
         comprobantes=comprobantes,
         filtro_empleado=id_empleado,
-        filtro_periodo=id_periodo
+        filtro_periodo=id_periodo,
+        busqueda=busqueda
     )
 
 

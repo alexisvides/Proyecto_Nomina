@@ -1,455 +1,717 @@
--- ========================================
--- SCRIPT COMPLETO DE CREACIÓN DE BASE DE DATOS
--- Sistema de Gestión de Nómina y RRHH
--- ========================================
--- Este script crea todas las tablas, relaciones y datos iniciales
--- Ejecutar en SQL Server
--- ========================================
-
-USE master;
+USE [master]
 GO
-
--- Eliminar base de datos si existe (CUIDADO: esto borra todos los datos)
-IF EXISTS (SELECT name FROM sys.databases WHERE name = 'NominaDB')
-BEGIN
-    ALTER DATABASE NominaDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE NominaDB;
-END
+/****** Object:  Database [proyecto]    Script Date: 21/10/2025 22:41:16 ******/
+CREATE DATABASE [proyecto]
+ CONTAINMENT = NONE
+ ON  PRIMARY 
+( NAME = N'proyecto', FILENAME = N'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLSERVER\MSSQL\DATA\proyecto.mdf' , SIZE = 73728KB , MAXSIZE = UNLIMITED, FILEGROWTH = 65536KB )
+ LOG ON 
+( NAME = N'proyecto_log', FILENAME = N'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLSERVER\MSSQL\DATA\proyecto_log.ldf' , SIZE = 73728KB , MAXSIZE = 2048GB , FILEGROWTH = 65536KB )
+ WITH CATALOG_COLLATION = DATABASE_DEFAULT, LEDGER = OFF
 GO
-
--- Crear la base de datos
-CREATE DATABASE NominaDB;
+ALTER DATABASE [proyecto] SET COMPATIBILITY_LEVEL = 160
 GO
-
-USE NominaDB;
+IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
+begin
+EXEC [proyecto].[dbo].[sp_fulltext_database] @action = 'enable'
+end
 GO
-
--- ========================================
--- TABLAS DE SEGURIDAD Y USUARIOS
--- ========================================
-
--- Tabla: Roles
-CREATE TABLE Roles (
-    IdRol INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre NVARCHAR(100) NOT NULL UNIQUE,
-    Descripcion NVARCHAR(255),
-    EsPredefinido BIT DEFAULT 1,
-    FechaCreacion DATETIME DEFAULT GETDATE()
-);
+ALTER DATABASE [proyecto] SET ANSI_NULL_DEFAULT OFF 
 GO
-
--- Tabla: Módulos del Sistema
-CREATE TABLE Modulos (
-    IdModulo INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre NVARCHAR(100) NOT NULL UNIQUE,
-    Descripcion NVARCHAR(255),
-    Ruta NVARCHAR(255),
-    Icono NVARCHAR(50),
-    Orden INT DEFAULT 0,
-    Activo BIT DEFAULT 1,
-    FechaCreacion DATETIME DEFAULT GETDATE()
-);
+ALTER DATABASE [proyecto] SET ANSI_NULLS OFF 
 GO
-
--- Tabla: Permisos por Rol (permisos predefinidos)
-CREATE TABLE PermisosRol (
-    IdPermisoRol INT IDENTITY(1,1) PRIMARY KEY,
-    IdRol INT NOT NULL,
-    Modulo NVARCHAR(100) NOT NULL,
-    Ver BIT DEFAULT 0,
-    Crear BIT DEFAULT 0,
-    Editar BIT DEFAULT 0,
-    Eliminar BIT DEFAULT 0,
-    FOREIGN KEY (IdRol) REFERENCES Roles(IdRol) ON DELETE CASCADE,
-    CONSTRAINT UQ_PermisoRol_Modulo UNIQUE (IdRol, Modulo)
-);
+ALTER DATABASE [proyecto] SET ANSI_PADDING OFF 
 GO
-
--- Tabla: Usuarios
-CREATE TABLE Usuarios (
-    IdUsuario INT IDENTITY(1,1) PRIMARY KEY,
-    NombreUsuario NVARCHAR(100) NOT NULL UNIQUE,
-    Correo NVARCHAR(255) NOT NULL UNIQUE,
-    ClaveHash NVARCHAR(255) NOT NULL,
-    IdRol INT NOT NULL,
-    IdEmpleado INT NULL,
-    Activo BIT DEFAULT 1,
-    FechaCreacion DATETIME DEFAULT GETDATE(),
-    UltimoAcceso DATETIME NULL,
-    FOREIGN KEY (IdRol) REFERENCES Roles(IdRol)
-);
+ALTER DATABASE [proyecto] SET ANSI_WARNINGS OFF 
 GO
-
--- Tabla: Permisos por Usuario (permisos personalizados)
-CREATE TABLE PermisosUsuarios (
-    IdPermisoUsuario INT IDENTITY(1,1) PRIMARY KEY,
-    IdUsuario INT NOT NULL,
-    IdModulo INT NOT NULL,
-    Ver BIT DEFAULT 0,
-    Crear BIT DEFAULT 0,
-    Editar BIT DEFAULT 0,
-    Eliminar BIT DEFAULT 0,
-    TieneAcceso BIT DEFAULT 1,
-    FechaAsignacion DATETIME DEFAULT GETDATE(),
-    FOREIGN KEY (IdUsuario) REFERENCES Usuarios(IdUsuario) ON DELETE CASCADE,
-    FOREIGN KEY (IdModulo) REFERENCES Modulos(IdModulo) ON DELETE CASCADE,
-    CONSTRAINT UQ_PermisoUsuario_Modulo UNIQUE (IdUsuario, IdModulo)
-);
+ALTER DATABASE [proyecto] SET ARITHABORT OFF 
 GO
-
--- Tabla: Auditoría
-CREATE TABLE Auditoria (
-    IdAuditoria INT IDENTITY(1,1) PRIMARY KEY,
-    IdUsuario INT NULL,
-    Accion NVARCHAR(255) NOT NULL,
-    Tabla NVARCHAR(100),
-    Detalles NVARCHAR(MAX),
-    FechaHora DATETIME DEFAULT GETDATE(),
-    DireccionIP NVARCHAR(45),
-    FOREIGN KEY (IdUsuario) REFERENCES Usuarios(IdUsuario) ON DELETE SET NULL
-);
+ALTER DATABASE [proyecto] SET AUTO_CLOSE OFF 
 GO
-
--- ========================================
--- TABLAS DE ESTRUCTURA ORGANIZACIONAL
--- ========================================
-
--- Tabla: Departamentos
-CREATE TABLE Departamentos (
-    IdDepartamento INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre NVARCHAR(255) NOT NULL,
-    Descripcion NVARCHAR(MAX),
-    Activo BIT DEFAULT 1,
-    FechaCreacion DATETIME DEFAULT GETDATE()
-);
+ALTER DATABASE [proyecto] SET AUTO_SHRINK OFF 
 GO
-
--- Tabla: Puestos
-CREATE TABLE Puestos (
-    IdPuesto INT IDENTITY(1,1) PRIMARY KEY,
-    Titulo NVARCHAR(255) NOT NULL,
-    Descripcion NVARCHAR(MAX),
-    IdDepartamento INT NULL,
-    SalarioBase DECIMAL(18,2) DEFAULT 0,
-    Activo BIT DEFAULT 1,
-    FechaCreacion DATETIME DEFAULT GETDATE(),
-    FOREIGN KEY (IdDepartamento) REFERENCES Departamentos(IdDepartamento) ON DELETE SET NULL
-);
+ALTER DATABASE [proyecto] SET AUTO_UPDATE_STATISTICS ON 
 GO
-
--- Tabla: Empleados
-CREATE TABLE Empleados (
-    IdEmpleado INT IDENTITY(1,1) PRIMARY KEY,
-    CodigoEmpleado NVARCHAR(50) UNIQUE,
-    Nombres NVARCHAR(255) NOT NULL,
-    Apellidos NVARCHAR(255) NOT NULL,
-    DPI NVARCHAR(20) UNIQUE,
-    NIT NVARCHAR(20),
-    FechaNacimiento DATE,
-    Genero NVARCHAR(20),
-    EstadoCivil NVARCHAR(50),
-    Direccion NVARCHAR(MAX),
-    Telefono NVARCHAR(20),
-    Correo NVARCHAR(255),
-    IdPuesto INT NULL,
-    FechaIngreso DATE,
-    FechaEgreso DATE NULL,
-    TipoPago NVARCHAR(50) DEFAULT 'Mensual',
-    SalarioBase DECIMAL(18,2) DEFAULT 0,
-    CuentaBancaria NVARCHAR(50),
-    Banco NVARCHAR(100),
-    Activo BIT DEFAULT 1,
-    FechaCreacion DATETIME DEFAULT GETDATE(),
-    FOREIGN KEY (IdPuesto) REFERENCES Puestos(IdPuesto) ON DELETE SET NULL
-);
+ALTER DATABASE [proyecto] SET CURSOR_CLOSE_ON_COMMIT OFF 
 GO
-
--- Agregar FK de IdEmpleado en Usuarios (después de crear Empleados)
-ALTER TABLE Usuarios
-ADD CONSTRAINT FK_Usuarios_Empleados 
-FOREIGN KEY (IdEmpleado) REFERENCES Empleados(IdEmpleado) ON DELETE SET NULL;
+ALTER DATABASE [proyecto] SET CURSOR_DEFAULT  GLOBAL 
 GO
-
--- ========================================
--- TABLAS DE NÓMINA
--- ========================================
-
--- Tabla: Beneficios y Deducciones
-CREATE TABLE BeneficiosDeducciones (
-    IdBeneficioDeduccion INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre NVARCHAR(255) NOT NULL,
-    Descripcion NVARCHAR(MAX),
-    Tipo NVARCHAR(50) NOT NULL CHECK (Tipo IN ('Percepción', 'Deducción')),
-    Calculo NVARCHAR(50) NOT NULL CHECK (Calculo IN ('Fijo', 'Porcentaje')),
-    Valor DECIMAL(18,2) DEFAULT 0,
-    EsObligatorio BIT DEFAULT 0,
-    AplicaIGSS BIT DEFAULT 0,
-    AplicaISR BIT DEFAULT 0,
-    Activo BIT DEFAULT 1,
-    FechaCreacion DATETIME DEFAULT GETDATE()
-);
+ALTER DATABASE [proyecto] SET CONCAT_NULL_YIELDS_NULL OFF 
 GO
-
--- Tabla: Asignación de Beneficios/Deducciones a Empleados
-CREATE TABLE EmpleadoBeneficiosDeduccioness (
-    IdEmpleadoBeneficioDeduccion INT IDENTITY(1,1) PRIMARY KEY,
-    IdEmpleado INT NOT NULL,
-    IdBeneficioDeduccion INT NOT NULL,
-    ValorPersonalizado DECIMAL(18,2) NULL,
-    FechaInicio DATE NOT NULL,
-    FechaFin DATE NULL,
-    Activo BIT DEFAULT 1,
-    FOREIGN KEY (IdEmpleado) REFERENCES Empleados(IdEmpleado) ON DELETE CASCADE,
-    FOREIGN KEY (IdBeneficioDeduccion) REFERENCES BeneficiosDeducciones(IdBeneficioDeduccion) ON DELETE CASCADE
-);
+ALTER DATABASE [proyecto] SET NUMERIC_ROUNDABORT OFF 
 GO
-
--- Tabla: Periodos de Nómina
-CREATE TABLE Periodos (
-    IdPeriodo INT IDENTITY(1,1) PRIMARY KEY,
-    Descripcion NVARCHAR(255) NOT NULL,
-    FechaInicio DATE NOT NULL,
-    FechaFin DATE NOT NULL,
-    Modalidad NVARCHAR(50) NOT NULL CHECK (Modalidad IN ('Quincenal', 'Mensual', 'Semanal')),
-    Estado NVARCHAR(50) DEFAULT 'Borrador' CHECK (Estado IN ('Borrador', 'Procesado', 'Cerrado')),
-    FechaCreacion DATETIME DEFAULT GETDATE(),
-    FechaCierre DATETIME NULL,
-    CONSTRAINT UQ_Periodo_Fechas UNIQUE (FechaInicio, FechaFin)
-);
+ALTER DATABASE [proyecto] SET QUOTED_IDENTIFIER OFF 
 GO
-
--- Tabla: Registros de Nómina
-CREATE TABLE RegistrosNomina (
-    IdRegistroNomina INT IDENTITY(1,1) PRIMARY KEY,
-    IdEmpleado INT NOT NULL,
-    IdPeriodo INT NOT NULL,
-    DiasLaborados INT DEFAULT 0,
-    HorasExtras DECIMAL(10,2) DEFAULT 0,
-    SalarioBruto DECIMAL(18,2) DEFAULT 0,
-    TotalPercepciones DECIMAL(18,2) DEFAULT 0,
-    TotalDeducciones DECIMAL(18,2) DEFAULT 0,
-    SalarioNeto DECIMAL(18,2) DEFAULT 0,
-    FechaCreacion DATETIME DEFAULT GETDATE(),
-    FOREIGN KEY (IdEmpleado) REFERENCES Empleados(IdEmpleado) ON DELETE CASCADE,
-    FOREIGN KEY (IdPeriodo) REFERENCES Periodos(IdPeriodo) ON DELETE CASCADE,
-    CONSTRAINT UQ_Registro_Periodo_Empleado UNIQUE (IdEmpleado, IdPeriodo)
-);
+ALTER DATABASE [proyecto] SET RECURSIVE_TRIGGERS OFF 
 GO
-
--- Tabla: Items de Nómina (detalle de percepciones y deducciones)
-CREATE TABLE ItemsNomina (
-    IdItemNomina INT IDENTITY(1,1) PRIMARY KEY,
-    IdRegistroNomina INT NOT NULL,
-    IdBeneficioDeduccion INT NULL,
-    Descripcion NVARCHAR(255) NOT NULL,
-    Monto DECIMAL(18,2) DEFAULT 0,
-    FOREIGN KEY (IdRegistroNomina) REFERENCES RegistrosNomina(IdRegistroNomina) ON DELETE CASCADE,
-    FOREIGN KEY (IdBeneficioDeduccion) REFERENCES BeneficiosDeducciones(IdBeneficioDeduccion) ON DELETE SET NULL
-);
+ALTER DATABASE [proyecto] SET  ENABLE_BROKER 
 GO
-
--- ========================================
--- TABLAS DE ASISTENCIA
--- ========================================
-
--- Tabla: Registros de Asistencia
-CREATE TABLE Asistencia (
-    IdAsistencia INT IDENTITY(1,1) PRIMARY KEY,
-    IdEmpleado INT NOT NULL,
-    Fecha DATE NOT NULL,
-    HoraEntrada TIME NULL,
-    HoraSalida TIME NULL,
-    HorasTrabajadas DECIMAL(10,2) DEFAULT 0,
-    Observaciones NVARCHAR(MAX),
-    Estado NVARCHAR(50) DEFAULT 'Presente' CHECK (Estado IN ('Presente', 'Ausente', 'Tardanza', 'Permiso', 'Vacaciones', 'Incapacidad')),
-    FechaCreacion DATETIME DEFAULT GETDATE(),
-    FOREIGN KEY (IdEmpleado) REFERENCES Empleados(IdEmpleado) ON DELETE CASCADE,
-    CONSTRAINT UQ_Asistencia_Empleado_Fecha UNIQUE (IdEmpleado, Fecha)
-);
+ALTER DATABASE [proyecto] SET AUTO_UPDATE_STATISTICS_ASYNC OFF 
 GO
-
--- ========================================
--- DATOS INICIALES (SEED DATA)
--- ========================================
-
--- Insertar Roles Predefinidos
-INSERT INTO Roles (Nombre, Descripcion, EsPredefinido) VALUES 
-('Administrador', 'Acceso completo al sistema', 1),
-('RRHH', 'Gestión de recursos humanos y nómina', 1),
-('Gerente', 'Acceso a reportes y gestión limitada', 1),
-('Empleado', 'Acceso limitado a funciones básicas', 1);
+ALTER DATABASE [proyecto] SET DATE_CORRELATION_OPTIMIZATION OFF 
 GO
-
--- Insertar Módulos del Sistema
-INSERT INTO Modulos (Nombre, Descripcion, Ruta, Icono, Orden, Activo) VALUES
-('Dashboard', 'Panel de control principal', '/dashboard', 'home', 1, 1),
-('Empleados', 'Gestión de empleados', '/empleados', 'users', 2, 1),
-('Departamentos', 'Gestión de departamentos', '/departamentos', 'briefcase', 3, 1),
-('Puestos', 'Gestión de puestos de trabajo', '/puestos', 'clipboard', 4, 1),
-('Beneficios', 'Beneficios y deducciones', '/beneficios', 'dollar-sign', 5, 1),
-('Periodos', 'Períodos de nómina', '/periodos', 'calendar', 6, 1),
-('Asistencia', 'Control de asistencia', '/asistencia', 'clock', 7, 1),
-('Usuarios', 'Gestión de usuarios', '/seguridad/usuarios', 'user-check', 8, 1),
-('Permisos', 'Gestión de permisos', '/seguridad/permisos', 'shield', 9, 1),
-('Reportes', 'Reportes del sistema', '/reportes', 'bar-chart', 10, 1);
+ALTER DATABASE [proyecto] SET TRUSTWORTHY OFF 
 GO
-
--- Insertar Permisos para Rol: Administrador (acceso total)
-INSERT INTO PermisosRol (IdRol, Modulo, Ver, Crear, Editar, Eliminar)
-SELECT r.IdRol, m.Nombre, 1, 1, 1, 1
-FROM Roles r
-CROSS JOIN Modulos m
-WHERE r.Nombre = 'Administrador';
+ALTER DATABASE [proyecto] SET ALLOW_SNAPSHOT_ISOLATION OFF 
 GO
-
--- Insertar Permisos para Rol: RRHH
-INSERT INTO PermisosRol (IdRol, Modulo, Ver, Crear, Editar, Eliminar)
-SELECT r.IdRol, m.Nombre, 1, 1, 1, 1
-FROM Roles r
-CROSS JOIN Modulos m
-WHERE r.Nombre = 'RRHH' 
-  AND m.Nombre IN ('Dashboard', 'Empleados', 'Departamentos', 'Puestos', 'Beneficios', 'Periodos', 'Asistencia', 'Reportes');
+ALTER DATABASE [proyecto] SET PARAMETERIZATION SIMPLE 
 GO
-
--- Insertar Permisos para Rol: Gerente
-INSERT INTO PermisosRol (IdRol, Modulo, Ver, Crear, Editar, Eliminar)
-SELECT r.IdRol, m.Nombre, 1, 0, 0, 0
-FROM Roles r
-CROSS JOIN Modulos m
-WHERE r.Nombre = 'Gerente' 
-  AND m.Nombre IN ('Dashboard', 'Empleados', 'Departamentos', 'Asistencia', 'Reportes');
+ALTER DATABASE [proyecto] SET READ_COMMITTED_SNAPSHOT OFF 
 GO
-
--- Insertar Permisos para Rol: Empleado
-INSERT INTO PermisosRol (IdRol, Modulo, Ver, Crear, Editar, Eliminar)
-SELECT r.IdRol, m.Nombre, 1, 0, 0, 0
-FROM Roles r
-CROSS JOIN Modulos m
-WHERE r.Nombre = 'Empleado' 
-  AND m.Nombre IN ('Dashboard');
+ALTER DATABASE [proyecto] SET HONOR_BROKER_PRIORITY OFF 
 GO
-
--- Usuario Administrador por defecto
--- Contraseña: admin123 (cambiar después del primer acceso)
-INSERT INTO Usuarios (NombreUsuario, Correo, ClaveHash, IdRol, Activo)
-VALUES ('admin', 'admin@sistema.com', 'admin123', 
-    (SELECT IdRol FROM Roles WHERE Nombre = 'Administrador'), 1);
+ALTER DATABASE [proyecto] SET RECOVERY FULL 
 GO
-
--- Crear permisos personalizados para el usuario admin
-INSERT INTO PermisosUsuarios (IdUsuario, IdModulo, Ver, Crear, Editar, Eliminar, TieneAcceso)
-SELECT 
-    u.IdUsuario,
-    m.IdModulo,
-    1, 1, 1, 1, 1
-FROM Usuarios u
-CROSS JOIN Modulos m
-WHERE u.NombreUsuario = 'admin';
+ALTER DATABASE [proyecto] SET  MULTI_USER 
 GO
-
--- Datos de ejemplo para Departamentos
-INSERT INTO Departamentos (Nombre, Descripcion, Activo) VALUES
-('Administración', 'Departamento de administración general', 1),
-('Recursos Humanos', 'Gestión de personal', 1),
-('Contabilidad', 'Departamento de contabilidad y finanzas', 1),
-('Sistemas', 'Tecnologías de la información', 1),
-('Ventas', 'Departamento de ventas', 1);
+ALTER DATABASE [proyecto] SET PAGE_VERIFY CHECKSUM  
 GO
-
--- Datos de ejemplo para Puestos
-INSERT INTO Puestos (Titulo, Descripcion, IdDepartamento, SalarioBase, Activo) VALUES
-('Gerente General', 'Gerente general de la empresa', 1, 15000.00, 1),
-('Gerente de RRHH', 'Responsable de recursos humanos', 2, 12000.00, 1),
-('Contador', 'Contador general', 3, 10000.00, 1),
-('Desarrollador', 'Desarrollador de software', 4, 8000.00, 1),
-('Vendedor', 'Ejecutivo de ventas', 5, 6000.00, 1),
-('Asistente Administrativo', 'Asistente de administración', 1, 5000.00, 1);
+ALTER DATABASE [proyecto] SET DB_CHAINING OFF 
 GO
-
--- Datos de ejemplo para Beneficios y Deducciones
-INSERT INTO BeneficiosDeducciones (Nombre, Descripcion, Tipo, Calculo, Valor, EsObligatorio, Activo) VALUES
-('Salario Base', 'Salario base del empleado', 'Percepción', 'Fijo', 0, 1, 1),
-('Bonificación Decreto 37-2001', 'Bonificación establecida por ley', 'Percepción', 'Fijo', 250.00, 1, 1),
-('Horas Extra', 'Pago por horas extras trabajadas', 'Percepción', 'Fijo', 0, 0, 1),
-('Comisiones', 'Comisiones por ventas', 'Percepción', 'Fijo', 0, 0, 1),
-('IGSS (Empleado)', 'Aporte del empleado al IGSS', 'Deducción', 'Porcentaje', 4.83, 1, 1),
-('ISR', 'Impuesto sobre la renta', 'Deducción', 'Fijo', 0, 1, 1),
-('Anticipos', 'Anticipos de salario', 'Deducción', 'Fijo', 0, 0, 1);
+ALTER DATABASE [proyecto] SET FILESTREAM( NON_TRANSACTED_ACCESS = OFF ) 
 GO
-
--- ========================================
--- ÍNDICES PARA MEJORAR RENDIMIENTO
--- ========================================
-
--- Índices en Empleados
-CREATE INDEX IX_Empleados_Activo ON Empleados(Activo);
-CREATE INDEX IX_Empleados_IdPuesto ON Empleados(IdPuesto);
+ALTER DATABASE [proyecto] SET TARGET_RECOVERY_TIME = 60 SECONDS 
 GO
-
--- Índices en Usuarios
-CREATE INDEX IX_Usuarios_Activo ON Usuarios(Activo);
-CREATE INDEX IX_Usuarios_IdRol ON Usuarios(IdRol);
+ALTER DATABASE [proyecto] SET DELAYED_DURABILITY = DISABLED 
 GO
-
--- Índices en Asistencia
-CREATE INDEX IX_Asistencia_Fecha ON Asistencia(Fecha);
-CREATE INDEX IX_Asistencia_IdEmpleado ON Asistencia(IdEmpleado);
+ALTER DATABASE [proyecto] SET ACCELERATED_DATABASE_RECOVERY = OFF  
 GO
-
--- Índices en RegistrosNomina
-CREATE INDEX IX_RegistrosNomina_IdPeriodo ON RegistrosNomina(IdPeriodo);
-CREATE INDEX IX_RegistrosNomina_IdEmpleado ON RegistrosNomina(IdEmpleado);
+EXEC sys.sp_db_vardecimal_storage_format N'proyecto', N'ON'
 GO
-
--- ========================================
--- VISTAS ÚTILES
--- ========================================
-
--- Vista: Empleados con información completa
-CREATE VIEW vw_EmpleadosCompleto AS
-SELECT 
-    e.IdEmpleado,
-    e.CodigoEmpleado,
-    e.Nombres,
-    e.Apellidos,
-    e.Nombres + ' ' + e.Apellidos AS NombreCompleto,
-    e.DPI,
-    e.NIT,
-    e.FechaNacimiento,
-    e.Genero,
-    e.Telefono,
-    e.Correo,
-    p.Titulo AS Puesto,
-    d.Nombre AS Departamento,
-    e.FechaIngreso,
-    e.SalarioBase,
-    e.Activo,
-    DATEDIFF(YEAR, e.FechaIngreso, GETDATE()) AS AntiguedadAnios
-FROM Empleados e
-LEFT JOIN Puestos p ON e.IdPuesto = p.IdPuesto
-LEFT JOIN Departamentos d ON p.IdDepartamento = d.IdDepartamento;
+ALTER DATABASE [proyecto] SET QUERY_STORE = ON
 GO
-
--- Vista: Usuarios con información de rol
-CREATE VIEW vw_UsuariosCompleto AS
-SELECT 
-    u.IdUsuario,
-    u.NombreUsuario,
-    u.Correo,
-    r.Nombre AS Rol,
-    u.Activo,
-    u.FechaCreacion,
-    u.UltimoAcceso,
-    e.Nombres + ' ' + e.Apellidos AS EmpleadoAsociado
-FROM Usuarios u
-INNER JOIN Roles r ON u.IdRol = r.IdRol
-LEFT JOIN Empleados e ON u.IdEmpleado = e.IdEmpleado;
+ALTER DATABASE [proyecto] SET QUERY_STORE (OPERATION_MODE = READ_WRITE, CLEANUP_POLICY = (STALE_QUERY_THRESHOLD_DAYS = 30), DATA_FLUSH_INTERVAL_SECONDS = 900, INTERVAL_LENGTH_MINUTES = 60, MAX_STORAGE_SIZE_MB = 1000, QUERY_CAPTURE_MODE = AUTO, SIZE_BASED_CLEANUP_MODE = AUTO, MAX_PLANS_PER_QUERY = 200, WAIT_STATS_CAPTURE_MODE = ON)
 GO
-
--- ========================================
--- SCRIPT COMPLETADO
--- ========================================
-PRINT 'Base de datos creada exitosamente';
-PRINT 'Usuario por defecto: admin / admin123';
-PRINT 'IMPORTANTE: Cambiar la contraseña del administrador después del primer acceso';
+USE [proyecto]
+GO
+/****** Object:  Table [dbo].[Asistencias]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Asistencias](
+	[IdAsistencia] [int] IDENTITY(1,1) NOT NULL,
+	[IdEmpleado] [int] NOT NULL,
+	[FechaHora] [datetime2](7) NOT NULL,
+	[Tipo] [varchar](20) NOT NULL,
+	[Observacion] [varchar](255) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdAsistencia] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Auditoria]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Auditoria](
+	[IdLog] [int] IDENTITY(1,1) NOT NULL,
+	[IdUsuario] [int] NULL,
+	[NombreUsuario] [varchar](50) NULL,
+	[Accion] [varchar](100) NOT NULL,
+	[Modulo] [varchar](50) NULL,
+	[Detalles] [varchar](500) NULL,
+	[FechaHora] [datetime2](7) NOT NULL,
+	[DireccionIP] [varchar](45) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdLog] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[BeneficiosDeducciones]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[BeneficiosDeducciones](
+	[IdBeneficioDeduccion] [int] IDENTITY(1,1) NOT NULL,
+	[Nombre] [varchar](120) NOT NULL,
+	[Tipo] [varchar](20) NOT NULL,
+	[TipoCalculo] [varchar](20) NOT NULL,
+	[Valor] [decimal](10, 4) NULL,
+	[Activo] [bit] NOT NULL,
+	[Descripcion] [varchar](255) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdBeneficioDeduccion] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Departamentos]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Departamentos](
+	[IdDepartamento] [int] IDENTITY(1,1) NOT NULL,
+	[Nombre] [varchar](100) NOT NULL,
+	[Descripcion] [varchar](255) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdDepartamento] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[Nombre] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[DocumentosEmpleado]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[DocumentosEmpleado](
+	[IdDocumento] [int] IDENTITY(1,1) NOT NULL,
+	[IdEmpleado] [int] NOT NULL,
+	[TipoDocumento] [varchar](50) NOT NULL,
+	[RutaArchivo] [varchar](255) NOT NULL,
+	[FechaCarga] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdDocumento] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[EmpleadoBeneficioDeduccion]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[EmpleadoBeneficioDeduccion](
+	[IdEmpleadoBD] [int] IDENTITY(1,1) NOT NULL,
+	[IdEmpleado] [int] NOT NULL,
+	[IdBeneficioDeduccion] [int] NOT NULL,
+	[ValorPersonalizado] [decimal](12, 2) NULL,
+	[Activo] [bit] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdEmpleadoBD] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[EmpleadoBeneficios]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[EmpleadoBeneficios](
+	[IdEmpleado] [int] NOT NULL,
+	[IdBeneficioDeduccion] [int] NOT NULL,
+	[Activo] [bit] NOT NULL,
+	[TipoCalculo] [varchar](20) NULL,
+	[Valor] [decimal](18, 4) NULL,
+ CONSTRAINT [PK_EmpleadoBeneficios] PRIMARY KEY CLUSTERED 
+(
+	[IdEmpleado] ASC,
+	[IdBeneficioDeduccion] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Empleados]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Empleados](
+	[IdEmpleado] [int] IDENTITY(1,1) NOT NULL,
+	[CodigoEmpleado] [varchar](30) NOT NULL,
+	[Nombres] [varchar](100) NOT NULL,
+	[Apellidos] [varchar](100) NOT NULL,
+	[DocumentoIdentidad] [varchar](50) NOT NULL,
+	[FechaContratacion] [date] NOT NULL,
+	[IdDepartamento] [int] NULL,
+	[IdPuesto] [int] NULL,
+	[SalarioBase] [decimal](12, 2) NOT NULL,
+	[Correo] [varchar](150) NULL,
+	[Telefono] [varchar](30) NULL,
+	[TipoContrato] [varchar](50) NULL,
+	[FechaCreacion] [datetime2](7) NOT NULL,
+	[FechaActualizacion] [datetime2](7) NULL,
+	[ActualizadoPor] [int] NULL,
+	[NumeroIGSS] [varchar](50) NULL,
+	[FechaFin] [date] NULL,
+	[FechaNacimiento] [date] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdEmpleado] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[DocumentoIdentidad] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[CodigoEmpleado] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[Correo] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[ItemsNomina]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ItemsNomina](
+	[IdItem] [int] IDENTITY(1,1) NOT NULL,
+	[IdNomina] [int] NOT NULL,
+	[IdBeneficioDeduccion] [int] NULL,
+	[TipoItem] [varchar](20) NOT NULL,
+	[Monto] [decimal](12, 2) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdItem] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Modulos]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Modulos](
+	[IdModulo] [int] IDENTITY(1,1) NOT NULL,
+	[Nombre] [varchar](50) NOT NULL,
+	[Descripcion] [varchar](255) NULL,
+	[Ruta] [varchar](100) NOT NULL,
+	[Icono] [varchar](50) NULL,
+	[Orden] [int] NOT NULL,
+	[Activo] [bit] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdModulo] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[Nombre] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[PeriodosNomina]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[PeriodosNomina](
+	[IdPeriodo] [int] IDENTITY(1,1) NOT NULL,
+	[FechaInicio] [date] NOT NULL,
+	[FechaFin] [date] NOT NULL,
+	[TipoPeriodo] [varchar](20) NOT NULL,
+	[FechaCreacion] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdPeriodo] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_PeriodosNomina] UNIQUE NONCLUSTERED 
+(
+	[FechaInicio] ASC,
+	[FechaFin] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[PermisosUsuarios]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[PermisosUsuarios](
+	[IdPermiso] [int] IDENTITY(1,1) NOT NULL,
+	[IdUsuario] [int] NOT NULL,
+	[IdModulo] [int] NOT NULL,
+	[TieneAcceso] [bit] NOT NULL,
+	[PuedeCrear] [bit] NOT NULL,
+	[PuedeEditar] [bit] NOT NULL,
+	[PuedeEliminar] [bit] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdPermiso] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[IdUsuario] ASC,
+	[IdModulo] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[PlantillasPermisos]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[PlantillasPermisos](
+	[IdPlantilla] [int] IDENTITY(1,1) NOT NULL,
+	[Nombre] [varchar](100) NOT NULL,
+	[Descripcion] [varchar](255) NULL,
+	[Activo] [bit] NOT NULL,
+	[FechaCreacion] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdPlantilla] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[Nombre] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[PlantillasPermisosDetalle]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[PlantillasPermisosDetalle](
+	[IdDetalle] [int] IDENTITY(1,1) NOT NULL,
+	[IdPlantilla] [int] NOT NULL,
+	[IdModulo] [int] NOT NULL,
+	[TieneAcceso] [bit] NOT NULL,
+	[PuedeCrear] [bit] NOT NULL,
+	[PuedeEditar] [bit] NOT NULL,
+	[PuedeEliminar] [bit] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdDetalle] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[IdPlantilla] ASC,
+	[IdModulo] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Puestos]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Puestos](
+	[IdPuesto] [int] IDENTITY(1,1) NOT NULL,
+	[IdDepartamento] [int] NULL,
+	[Titulo] [varchar](100) NOT NULL,
+	[Descripcion] [varchar](255) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdPuesto] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[RegistrosNomina]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[RegistrosNomina](
+	[IdNomina] [int] IDENTITY(1,1) NOT NULL,
+	[IdEmpleado] [int] NOT NULL,
+	[IdPeriodo] [int] NOT NULL,
+	[SalarioBase] [decimal](12, 2) NOT NULL,
+	[TotalPrestaciones] [decimal](12, 2) NOT NULL,
+	[TotalDeducciones] [decimal](12, 2) NOT NULL,
+	[SalarioNeto] [decimal](12, 2) NOT NULL,
+	[FechaGeneracion] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdNomina] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_RegistrosNomina] UNIQUE NONCLUSTERED 
+(
+	[IdEmpleado] ASC,
+	[IdPeriodo] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Roles]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Roles](
+	[IdRol] [int] IDENTITY(1,1) NOT NULL,
+	[Nombre] [varchar](50) NOT NULL,
+	[Descripcion] [varchar](255) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdRol] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[Nombre] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[UsuarioRol]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[UsuarioRol](
+	[IdUsuario] [int] NOT NULL,
+	[IdRol] [int] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdUsuario] ASC,
+	[IdRol] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Usuarios]    Script Date: 21/10/2025 22:41:16 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Usuarios](
+	[IdUsuario] [int] IDENTITY(1,1) NOT NULL,
+	[NombreUsuario] [varchar](50) NOT NULL,
+	[Correo] [varchar](150) NOT NULL,
+	[ClaveHash] [varchar](255) NOT NULL,
+	[Activo] [bit] NOT NULL,
+	[FechaCreacion] [datetime2](7) NOT NULL,
+	[FechaActualizacion] [datetime2](7) NULL,
+	[ActualizadoPor] [int] NULL,
+	[IdRol] [int] NULL,
+	[IdEmpleado] [int] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[IdUsuario] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[Correo] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[NombreUsuario] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Index [IX_Asistencias_FechaHora]    Script Date: 21/10/2025 22:41:16 ******/
+CREATE NONCLUSTERED INDEX [IX_Asistencias_FechaHora] ON [dbo].[Asistencias]
+(
+	[FechaHora] DESC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [IX_Asistencias_IdEmpleado]    Script Date: 21/10/2025 22:41:16 ******/
+CREATE NONCLUSTERED INDEX [IX_Asistencias_IdEmpleado] ON [dbo].[Asistencias]
+(
+	[IdEmpleado] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [IX_Auditoria_FechaHora]    Script Date: 21/10/2025 22:41:16 ******/
+CREATE NONCLUSTERED INDEX [IX_Auditoria_FechaHora] ON [dbo].[Auditoria]
+(
+	[FechaHora] DESC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [IX_Auditoria_Usuario]    Script Date: 21/10/2025 22:41:16 ******/
+CREATE NONCLUSTERED INDEX [IX_Auditoria_Usuario] ON [dbo].[Auditoria]
+(
+	[IdUsuario] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [IX_EB_Beneficio]    Script Date: 21/10/2025 22:41:16 ******/
+CREATE NONCLUSTERED INDEX [IX_EB_Beneficio] ON [dbo].[EmpleadoBeneficios]
+(
+	[IdBeneficioDeduccion] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [IX_Empleados_NumeroIGSS]    Script Date: 21/10/2025 22:41:16 ******/
+CREATE NONCLUSTERED INDEX [IX_Empleados_NumeroIGSS] ON [dbo].[Empleados]
+(
+	[NumeroIGSS] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [IX_Usuarios_IdEmpleado]    Script Date: 21/10/2025 22:41:16 ******/
+CREATE NONCLUSTERED INDEX [IX_Usuarios_IdEmpleado] ON [dbo].[Usuarios]
+(
+	[IdEmpleado] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[Asistencias] ADD  CONSTRAINT [DF_Asistencias_FechaHora]  DEFAULT (getdate()) FOR [FechaHora]
+GO
+ALTER TABLE [dbo].[Auditoria] ADD  DEFAULT (getdate()) FOR [FechaHora]
+GO
+ALTER TABLE [dbo].[BeneficiosDeducciones] ADD  DEFAULT ((1)) FOR [Activo]
+GO
+ALTER TABLE [dbo].[DocumentosEmpleado] ADD  DEFAULT (getdate()) FOR [FechaCarga]
+GO
+ALTER TABLE [dbo].[EmpleadoBeneficioDeduccion] ADD  DEFAULT ((1)) FOR [Activo]
+GO
+ALTER TABLE [dbo].[EmpleadoBeneficios] ADD  DEFAULT ((1)) FOR [Activo]
+GO
+ALTER TABLE [dbo].[Empleados] ADD  DEFAULT (getdate()) FOR [FechaCreacion]
+GO
+ALTER TABLE [dbo].[Modulos] ADD  DEFAULT ((0)) FOR [Orden]
+GO
+ALTER TABLE [dbo].[Modulos] ADD  DEFAULT ((1)) FOR [Activo]
+GO
+ALTER TABLE [dbo].[PeriodosNomina] ADD  DEFAULT (getdate()) FOR [FechaCreacion]
+GO
+ALTER TABLE [dbo].[PermisosUsuarios] ADD  DEFAULT ((1)) FOR [TieneAcceso]
+GO
+ALTER TABLE [dbo].[PermisosUsuarios] ADD  DEFAULT ((1)) FOR [PuedeCrear]
+GO
+ALTER TABLE [dbo].[PermisosUsuarios] ADD  DEFAULT ((1)) FOR [PuedeEditar]
+GO
+ALTER TABLE [dbo].[PermisosUsuarios] ADD  DEFAULT ((1)) FOR [PuedeEliminar]
+GO
+ALTER TABLE [dbo].[PlantillasPermisos] ADD  DEFAULT ((1)) FOR [Activo]
+GO
+ALTER TABLE [dbo].[PlantillasPermisos] ADD  DEFAULT (getdate()) FOR [FechaCreacion]
+GO
+ALTER TABLE [dbo].[PlantillasPermisosDetalle] ADD  DEFAULT ((1)) FOR [TieneAcceso]
+GO
+ALTER TABLE [dbo].[PlantillasPermisosDetalle] ADD  DEFAULT ((1)) FOR [PuedeCrear]
+GO
+ALTER TABLE [dbo].[PlantillasPermisosDetalle] ADD  DEFAULT ((1)) FOR [PuedeEditar]
+GO
+ALTER TABLE [dbo].[PlantillasPermisosDetalle] ADD  DEFAULT ((1)) FOR [PuedeEliminar]
+GO
+ALTER TABLE [dbo].[RegistrosNomina] ADD  DEFAULT ((0)) FOR [TotalPrestaciones]
+GO
+ALTER TABLE [dbo].[RegistrosNomina] ADD  DEFAULT ((0)) FOR [TotalDeducciones]
+GO
+ALTER TABLE [dbo].[RegistrosNomina] ADD  DEFAULT ((0)) FOR [SalarioNeto]
+GO
+ALTER TABLE [dbo].[RegistrosNomina] ADD  DEFAULT (getdate()) FOR [FechaGeneracion]
+GO
+ALTER TABLE [dbo].[Usuarios] ADD  DEFAULT ((1)) FOR [Activo]
+GO
+ALTER TABLE [dbo].[Usuarios] ADD  DEFAULT (getdate()) FOR [FechaCreacion]
+GO
+ALTER TABLE [dbo].[Asistencias]  WITH CHECK ADD  CONSTRAINT [FK_Asistencias_Empleados] FOREIGN KEY([IdEmpleado])
+REFERENCES [dbo].[Empleados] ([IdEmpleado])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Asistencias] CHECK CONSTRAINT [FK_Asistencias_Empleados]
+GO
+ALTER TABLE [dbo].[Auditoria]  WITH CHECK ADD FOREIGN KEY([IdUsuario])
+REFERENCES [dbo].[Usuarios] ([IdUsuario])
+ON DELETE SET NULL
+GO
+ALTER TABLE [dbo].[DocumentosEmpleado]  WITH CHECK ADD FOREIGN KEY([IdEmpleado])
+REFERENCES [dbo].[Empleados] ([IdEmpleado])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[EmpleadoBeneficioDeduccion]  WITH CHECK ADD FOREIGN KEY([IdBeneficioDeduccion])
+REFERENCES [dbo].[BeneficiosDeducciones] ([IdBeneficioDeduccion])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[EmpleadoBeneficioDeduccion]  WITH CHECK ADD FOREIGN KEY([IdEmpleado])
+REFERENCES [dbo].[Empleados] ([IdEmpleado])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[EmpleadoBeneficios]  WITH CHECK ADD  CONSTRAINT [FK_EB_Beneficio] FOREIGN KEY([IdBeneficioDeduccion])
+REFERENCES [dbo].[BeneficiosDeducciones] ([IdBeneficioDeduccion])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[EmpleadoBeneficios] CHECK CONSTRAINT [FK_EB_Beneficio]
+GO
+ALTER TABLE [dbo].[EmpleadoBeneficios]  WITH CHECK ADD  CONSTRAINT [FK_EB_Empleado] FOREIGN KEY([IdEmpleado])
+REFERENCES [dbo].[Empleados] ([IdEmpleado])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[EmpleadoBeneficios] CHECK CONSTRAINT [FK_EB_Empleado]
+GO
+ALTER TABLE [dbo].[Empleados]  WITH CHECK ADD FOREIGN KEY([ActualizadoPor])
+REFERENCES [dbo].[Usuarios] ([IdUsuario])
+GO
+ALTER TABLE [dbo].[Empleados]  WITH CHECK ADD FOREIGN KEY([IdDepartamento])
+REFERENCES [dbo].[Departamentos] ([IdDepartamento])
+ON DELETE SET NULL
+GO
+ALTER TABLE [dbo].[Empleados]  WITH CHECK ADD FOREIGN KEY([IdPuesto])
+REFERENCES [dbo].[Puestos] ([IdPuesto])
+ON DELETE SET NULL
+GO
+ALTER TABLE [dbo].[ItemsNomina]  WITH CHECK ADD FOREIGN KEY([IdBeneficioDeduccion])
+REFERENCES [dbo].[BeneficiosDeducciones] ([IdBeneficioDeduccion])
+ON DELETE SET NULL
+GO
+ALTER TABLE [dbo].[ItemsNomina]  WITH CHECK ADD FOREIGN KEY([IdNomina])
+REFERENCES [dbo].[RegistrosNomina] ([IdNomina])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[PermisosUsuarios]  WITH CHECK ADD FOREIGN KEY([IdModulo])
+REFERENCES [dbo].[Modulos] ([IdModulo])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[PermisosUsuarios]  WITH CHECK ADD FOREIGN KEY([IdUsuario])
+REFERENCES [dbo].[Usuarios] ([IdUsuario])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[PlantillasPermisosDetalle]  WITH CHECK ADD FOREIGN KEY([IdModulo])
+REFERENCES [dbo].[Modulos] ([IdModulo])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[PlantillasPermisosDetalle]  WITH CHECK ADD FOREIGN KEY([IdPlantilla])
+REFERENCES [dbo].[PlantillasPermisos] ([IdPlantilla])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Puestos]  WITH CHECK ADD FOREIGN KEY([IdDepartamento])
+REFERENCES [dbo].[Departamentos] ([IdDepartamento])
+ON DELETE SET NULL
+GO
+ALTER TABLE [dbo].[RegistrosNomina]  WITH CHECK ADD FOREIGN KEY([IdEmpleado])
+REFERENCES [dbo].[Empleados] ([IdEmpleado])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[RegistrosNomina]  WITH CHECK ADD FOREIGN KEY([IdPeriodo])
+REFERENCES [dbo].[PeriodosNomina] ([IdPeriodo])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[UsuarioRol]  WITH CHECK ADD FOREIGN KEY([IdRol])
+REFERENCES [dbo].[Roles] ([IdRol])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[UsuarioRol]  WITH CHECK ADD FOREIGN KEY([IdUsuario])
+REFERENCES [dbo].[Usuarios] ([IdUsuario])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Usuarios]  WITH CHECK ADD  CONSTRAINT [FK_Usuarios_Empleados] FOREIGN KEY([IdEmpleado])
+REFERENCES [dbo].[Empleados] ([IdEmpleado])
+GO
+ALTER TABLE [dbo].[Usuarios] CHECK CONSTRAINT [FK_Usuarios_Empleados]
+GO
+ALTER TABLE [dbo].[Usuarios]  WITH CHECK ADD  CONSTRAINT [FK_Usuarios_Roles] FOREIGN KEY([IdRol])
+REFERENCES [dbo].[Roles] ([IdRol])
+ON DELETE SET NULL
+GO
+ALTER TABLE [dbo].[Usuarios] CHECK CONSTRAINT [FK_Usuarios_Roles]
+GO
+ALTER TABLE [dbo].[Asistencias]  WITH CHECK ADD  CONSTRAINT [CK_Asistencias_Tipo] CHECK  (([Tipo]='salida' OR [Tipo]='entrada'))
+GO
+ALTER TABLE [dbo].[Asistencias] CHECK CONSTRAINT [CK_Asistencias_Tipo]
+GO
+ALTER TABLE [dbo].[BeneficiosDeducciones]  WITH CHECK ADD CHECK  (([TipoCalculo]='fijo' OR [TipoCalculo]='porcentaje'))
+GO
+ALTER TABLE [dbo].[BeneficiosDeducciones]  WITH CHECK ADD CHECK  (([Valor]>=(0)))
+GO
+ALTER TABLE [dbo].[BeneficiosDeducciones]  WITH CHECK ADD CHECK  (([Tipo]='prestacion' OR [Tipo]='deduccion'))
+GO
+ALTER TABLE [dbo].[EmpleadoBeneficioDeduccion]  WITH CHECK ADD CHECK  (([ValorPersonalizado]>=(0)))
+GO
+ALTER TABLE [dbo].[Empleados]  WITH CHECK ADD CHECK  (([SalarioBase]>=(0)))
+GO
+ALTER TABLE [dbo].[ItemsNomina]  WITH CHECK ADD CHECK  (([Monto]>=(0)))
+GO
+ALTER TABLE [dbo].[ItemsNomina]  WITH CHECK ADD CHECK  (([TipoItem]='prestacion' OR [TipoItem]='deduccion'))
+GO
+ALTER TABLE [dbo].[PeriodosNomina]  WITH CHECK ADD CHECK  (([TipoPeriodo]='anual' OR [TipoPeriodo]='semanal' OR [TipoPeriodo]='quincenal' OR [TipoPeriodo]='mensual'))
+GO
+ALTER TABLE [dbo].[RegistrosNomina]  WITH CHECK ADD CHECK  (([SalarioBase]>=(0)))
+GO
+ALTER TABLE [dbo].[RegistrosNomina]  WITH CHECK ADD CHECK  (([TotalPrestaciones]>=(0)))
+GO
+ALTER TABLE [dbo].[RegistrosNomina]  WITH CHECK ADD CHECK  (([TotalDeducciones]>=(0)))
+GO
+USE [master]
+GO
+ALTER DATABASE [proyecto] SET  READ_WRITE 
 GO

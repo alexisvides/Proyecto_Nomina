@@ -3,55 +3,180 @@
 
 {% block content %}
 <section class="section">
-  <div class="card">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
-      <h2 class="card-title" style="margin:0;">Reportes</h2>
-    </div>
-    <p class="card-subtitle">Genera reportes de nómina, asistencia y empleados.</p>
+  <div class="card" style="margin-bottom:24px;">
+    <h2 class="card-title" style="margin-bottom:8px;">Reportes del Sistema</h2>
+    <p class="card-subtitle">Genera y exporta reportes en formato PDF de los diferentes módulos del sistema.</p>
+  </div>
 
-    <div style="margin-top:24px; display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
-      <!-- Reporte de Nómina por Periodo -->
-      <div class="card" style="padding:20px;">
-        <h3 style="margin:0 0 8px 0; font-size:18px; font-weight:600;">Nómina por Periodo</h3>
-        <p class="card-subtitle" style="margin-bottom:16px;">Exporta el detalle de nómina de un periodo específico.</p>
-        <form method="get" action="{{ url_for('periodos_listado') }}">
-          <button class="btn btn-primary" type="submit" style="width:100%;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M16 3v4a1 1 0 0 0 1 1h4"/>
-            </svg>
-            Ver Periodos
-          </button>
-        </form>
+  <!-- Grid de Reportes -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:20px;">
+    
+    <!-- Reporte de Empleados -->
+    <div class="card" style="padding:24px; border:2px solid transparent; transition:all 0.3s;" onmouseover="this.style.borderColor='#1e40af'" onmouseout="this.style.borderColor='transparent'">
+      <div style="display:flex; align-items:flex-start; gap:16px; margin-bottom:16px;">
+        <div style="background:linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding:16px; border-radius:12px; box-shadow:0 4px 12px rgba(30,64,175,0.3);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <div style="flex:1;">
+          <h3 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">Empleados</h3>
+          <p class="card-subtitle" style="margin:0; font-size:13px;">Lista completa de empleados</p>
+        </div>
       </div>
-
-      <!-- Reporte de Asistencia -->
-      <div class="card" style="padding:20px;">
-        <h3 style="margin:0 0 8px 0; font-size:18px; font-weight:600;">Asistencia</h3>
-        <p class="card-subtitle" style="margin-bottom:16px;">Consulta registros de asistencia por rango de fechas.</p>
-        <form method="get" action="{{ url_for('asistencia_listado') }}">
-          <button class="btn btn-primary" type="submit" style="width:100%;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-            Ver Asistencia
-          </button>
-        </form>
-      </div>
-
-      <!-- Reporte de Empleados -->
-      <div class="card" style="padding:20px;">
-        <h3 style="margin:0 0 8px 0; font-size:18px; font-weight:600;">Empleados</h3>
-        <p class="card-subtitle" style="margin-bottom:16px;">Lista completa de empleados activos e inactivos.</p>
-        <form method="get" action="{{ url_for('empleados_listado') }}">
-          <button class="btn btn-primary" type="submit" style="width:100%;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-            Ver Empleados
-          </button>
-        </form>
+      <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">
+        Reporte detallado con información de todos los empleados: datos personales, puestos, salarios y fechas de contratación.
+      </p>
+      <div style="display:flex; gap:8px;">
+        <a href="{{ url_for('reporte_empleados_pdf') }}" class="btn btn-primary" style="flex:1;" target="_blank">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Exportar PDF
+        </a>
+        <a href="{{ url_for('empleados_listado') }}" class="btn btn-outline" title="Ver módulo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </a>
       </div>
     </div>
+
+    <!-- Reporte de Nómina por Periodo -->
+    <div class="card" style="padding:24px; border:2px solid transparent; transition:all 0.3s;" onmouseover="this.style.borderColor='#059669'" onmouseout="this.style.borderColor='transparent'">
+      <div style="display:flex; align-items:flex-start; gap:16px; margin-bottom:16px;">
+        <div style="background:linear-gradient(135deg, #059669 0%, #10b981 100%); padding:16px; border-radius:12px; box-shadow:0 4px 12px rgba(5,150,105,0.3);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </div>
+        <div style="flex:1;">
+          <h3 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">Nómina por Periodo</h3>
+          <p class="card-subtitle" style="margin:0; font-size:13px;">Detalle de pagos por periodo</p>
+        </div>
+      </div>
+      <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">
+        Reporte detallado de nómina por periodo: salarios, prestaciones, deducciones, IGSS, ISR y salario neto de cada empleado.
+      </p>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn btn-primary" style="flex:1;" onclick="document.getElementById('modalNominaPeriodo').style.display='flex'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Exportar PDF
+        </button>
+        <a href="{{ url_for('periodos_listado') }}" class="btn btn-outline" title="Ver módulo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- Reporte de Asistencia -->
+    <div class="card" style="padding:24px; border:2px solid transparent; transition:all 0.3s;" onmouseover="this.style.borderColor='#7c3aed'" onmouseout="this.style.borderColor='transparent'">
+      <div style="display:flex; align-items:flex-start; gap:16px; margin-bottom:16px;">
+        <div style="background:linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); padding:16px; border-radius:12px; box-shadow:0 4px 12px rgba(124,58,237,0.3);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+        <div style="flex:1;">
+          <h3 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">Asistencia</h3>
+          <p class="card-subtitle" style="margin:0; font-size:13px;">Registros de entrada/salida</p>
+        </div>
+      </div>
+      <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">
+        Reporte de asistencia con todos los registros de entradas y salidas, incluyendo fecha, hora, empleado y observaciones.
+      </p>
+      <div style="display:flex; gap:8px;">
+        <a href="{{ url_for('reporte_asistencia_pdf') }}" class="btn btn-primary" style="flex:1;" target="_blank">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Exportar PDF
+        </a>
+        <a href="{{ url_for('asistencia_listado') }}" class="btn btn-outline" title="Ver módulo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- Reporte de Usuarios Activos -->
+    <div class="card" style="padding:24px; border:2px solid transparent; transition:all 0.3s;" onmouseover="this.style.borderColor='#dc2626'" onmouseout="this.style.borderColor='transparent'">
+      <div style="display:flex; align-items:flex-start; gap:16px; margin-bottom:16px;">
+        <div style="background:linear-gradient(135deg, #dc2626 0%, #f87171 100%); padding:16px; border-radius:12px; box-shadow:0 4px 12px rgba(220,38,38,0.3);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/>
+          </svg>
+        </div>
+        <div style="flex:1;">
+          <h3 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">Usuarios Activos</h3>
+          <p class="card-subtitle" style="margin:0; font-size:13px;">Control de acceso al sistema</p>
+        </div>
+      </div>
+      <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">
+        Listado de usuarios activos del sistema con sus roles, permisos y empleados asociados para auditoría de seguridad.
+      </p>
+      <div style="display:flex; gap:8px;">
+        <a href="{{ url_for('reporte_usuarios_pdf') }}" class="btn btn-primary" style="flex:1;" target="_blank">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Exportar PDF
+        </a>
+        <a href="{{ url_for('usuarios_listado') }}" class="btn btn-outline" title="Ver módulo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+
   </div>
 </section>
+
+<!-- Modal Seleccionar Periodo para Nómina -->
+<div id="modalNominaPeriodo" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+  <div class="card" style="max-width:500px; width:90%; margin:20px;">
+    <h3 class="card-title">Seleccionar Periodo de Nómina</h3>
+    <p class="card-subtitle" style="margin-bottom:20px;">Selecciona el periodo para generar el reporte en PDF.</p>
+    
+    <form method="get" action="{{ url_for('reporte_nomina_periodo_pdf') }}" target="_blank">
+      <div class="form-group">
+        <label for="id_periodo">Periodo</label>
+        <select name="id_periodo" id="id_periodo" required>
+          <option value="">-- Selecciona un periodo --</option>
+          {% if periodos %}
+            {% for p in periodos %}
+            <option value="{{ p[0] }}">{{ p[1] }} - {{ p[2] }} ({{ p[3] }})</option>
+            {% endfor %}
+          {% endif %}
+        </select>
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Generar PDF
+        </button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modalNominaPeriodo').style.display='none'">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// Cerrar modal al hacer click fuera
+document.getElementById('modalNominaPeriodo')?.addEventListener('click', function(e) {
+  if (e.target === this) {
+    this.style.display = 'none';
+  }
+});
+</script>
+
 {% endblock %}
